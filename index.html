@@ -258,6 +258,30 @@ function sanitizeRoom(r){
 }
 var ROOM = sanitizeRoom(new URLSearchParams(location.search).get("room") || "dubai-dec-2026");
 
+/* ---- Shared Firebase config (optional but recommended) ----
+   Paste your firebaseConfig values here ONCE, re-upload the file, and everyone
+   who opens the link connects automatically — no setup screen for your wife.
+   (Firebase web API keys are public by design; the database rules control access.)
+   Leave as null to keep the per-browser setup screen instead. */
+var FIREBASE_CONFIG = {
+
+  apiKey: "AIzaSyA7soUnpicfi27MGv72jdkpqOKJgLDMEVc",
+
+  authDomain: "dubai-trip-planner.firebaseapp.com",
+
+  databaseURL: "https://dubai-trip-planner-default-rtdb.firebaseio.com",
+
+  projectId: "dubai-trip-planner"
+};
+/* Example:
+var FIREBASE_CONFIG = {
+  apiKey: "AIza...",
+  authDomain: "dubai-trip-planner.firebaseapp.com",
+  databaseURL: "https://dubai-trip-planner-default-rtdb.firebaseio.com",
+  projectId: "dubai-trip-planner"
+};
+*/
+
 /* ============================== catalog ============================== */
 var CATALOG = [];
 var BY_ID = {};
@@ -371,7 +395,7 @@ function ensureDays(){
     if (!state.days[iso]) state.days[iso] = blankDay();
     for (var s=0;s<SLOTS.length;s++){
       var k = SLOTS[s];
-      if (!Object.prototype.toString.call(state.days[iso][k])==="[object Array]") state.days[iso][k] = [];
+      if (Object.prototype.toString.call(state.days[iso][k]) !== "[object Array]") state.days[iso][k] = [];
     }
     if (typeof state.days[iso].note !== "string") state.days[iso].note = "";
   }
@@ -467,9 +491,14 @@ function connectFirebase(cfg){
       }
     }, function(){
       setPill("error","Sync error — check database URL & rules");
+      // Never leave the board blank: show the recommended plan locally until sync works.
+      if (!didSeed && !Object.keys(state.days).length){ didSeed = true; applyPreseed(); }
+      ensureDays(); renderAll();
     });
   }catch(e){
     setPill("error","Sync error");
+    if (!didSeed && !Object.keys(state.days).length){ didSeed = true; applyPreseed(); }
+    ensureDays(); renderAll();
   }
 }
 
@@ -734,7 +763,14 @@ function init(){
   }catch(e){}
   wireEvents();
   var cfg = null, wasOffline = false;
-  try{ cfg = JSON.parse(localStorage.getItem(LS_CFG) || "null"); }catch(e){}
+  if (typeof FIREBASE_CONFIG !== "undefined" && FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey){
+    cfg = {apiKey:FIREBASE_CONFIG.apiKey, authDomain:FIREBASE_CONFIG.authDomain,
+           databaseURL:String(FIREBASE_CONFIG.databaseURL||"").replace(/\/+$/,""),
+           projectId:FIREBASE_CONFIG.projectId};
+    try{ localStorage.setItem(LS_CFG, JSON.stringify(cfg)); localStorage.removeItem(LS_OFF); }catch(e){}
+  } else {
+    try{ cfg = JSON.parse(localStorage.getItem(LS_CFG) || "null"); }catch(e){}
+  }
   try{ wasOffline = localStorage.getItem(LS_OFF) === "1"; }catch(e){}
   if (cfg && cfg.apiKey && !wasOffline){
     connectFirebase(cfg);
