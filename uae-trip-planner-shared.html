@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<!--
+================================================================================
+UAE TRIP PLANNER — shared collaborative board (Dec 13–26, 2026)
+Single self-contained HTML file. Host on GitHub Pages (or any static host).
+
+SETUP (one time):
+1. Create a free Firebase project at https://console.firebase.google.com
+   (name it anything, e.g. "uae-trip"; skip Analytics).
+2. Left menu: Build -> Realtime Database -> Create database -> pick a region
+   -> Start in TEST MODE.
+3. Project settings (gear icon) -> Your apps -> add a Web app (</>) ->
+   copy the firebaseConfig values.
+4. Open this page. On first run it asks for the four config values
+   (apiKey, authDomain, databaseURL, projectId) plus an optional display name.
+   Paste, hit Connect. The config is stored in this browser's localStorage only.
+5. Share this page's URL with your wife. Same URL = same shared plan, live sync.
+   Use ?room=some-name for a different shared board (default: dubai-dec-2026).
+
+RECOMMENDED Realtime Database rules (paste into the Rules tab):
+{
+  "rules": {
+    "plans": {
+      "$room": {
+        ".read": true,
+        ".write": true
+      }
+    }
+  }
+}
+NOTE: these rules let anyone with the link read/write the plan. That is fine
+for a vacation itinerary; tighten later if you want (e.g. require auth).
+
+OFFLINE MODE: "Continue offline" in the setup panel stores the plan in this
+browser's localStorage only — no sync. You can switch modes anytime via the
+gear icon in the header.
+================================================================================
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>UAE Trip Planner — Dec 13–26, 2026</title>
+<style>
+:root{
+  --bg:#faf6ee; --card:#ffffff; --ink:#2c2620; --muted:#8d8478;
+  --line:#e8e0d2; --accent:#0e7c7b; --accent-soft:#e2f2f1; --warn:#c26a1b;
+  --radius:14px; --shadow:0 2px 10px rgba(60,45,25,.08);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  line-height:1.45}
+header{position:sticky;top:0;z-index:50;background:rgba(250,246,238,.96);
+  backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:10px 14px}
+.hrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+h1{font-size:18px;margin:0;letter-spacing:.2px}
+.sub{font-size:12px;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;
+  padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--card)}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:#bdb2a2}
+.pill.live .dot{background:#2e9e4f}.pill.offline .dot{background:#b98a2f}.pill.error .dot{background:#c0392b}
+button{font:inherit;cursor:pointer}
+.btn{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:9px 14px;font-weight:600}
+.btn.ghost{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.btn.small{padding:6px 10px;font-size:13px;border-radius:8px}
+.iconbtn{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:7px 10px;font-size:15px;line-height:1}
+main{max-width:1280px;margin:0 auto;padding:14px}
+section{margin-bottom:22px}
+.sec-head{display:flex;align-items:baseline;gap:10px;margin:4px 2px 10px}
+.sec-head h2{font-size:16px;margin:0}
+.sec-head .hint{font-size:12px;color:var(--muted)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.filters input[type=search],.filters select{font:inherit;padding:8px 10px;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);min-width:0}
+.filters input[type=search]{flex:2 1 160px}
+.filters select{flex:1 1 120px}
+.pool-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:10px;box-shadow:var(--shadow);cursor:pointer;position:relative;
+  display:flex;flex-direction:column;gap:6px;min-height:118px}
+.card:hover{border-color:var(--accent)}
+.card.sel{outline:2px solid var(--accent);outline-offset:1px}
+.card h3{font-size:13.5px;margin:0;line-height:1.3}
+.card .meta{font-size:11.5px;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.chip{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:#f1ece1;color:#6d6355}
+.tagdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:3px}
+.onboard{position:absolute;top:8px;right:8px;font-size:10px;font-weight:700;background:var(--accent-soft);
+  color:var(--accent);border-radius:999px;padding:2px 7px}
+.board-wrap{overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch}
+.board{display:flex;gap:10px;min-width:min-content}
+.day{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  min-width:248px;max-width:248px;box-shadow:var(--shadow);display:flex;flex-direction:column}
+.day-head{padding:10px 10px 6px;border-bottom:1px dashed var(--line)}
+.day-head .d{font-weight:700;font-size:14px}
+.day-head .wd{font-size:12px;color:var(--muted)}
+.pace{font-size:11px;font-weight:700;margin-top:4px;display:inline-block;padding:2px 8px;border-radius:999px}
+.pace.packed{background:#fbe3cf;color:#a35412}
+.pace.restful{background:#dff0e4;color:#22703f}
+.pace.normal{background:#f1ece1;color:#6d6355}
+.slot{margin:8px;border:1.5px dashed #d9cfbc;border-radius:10px;min-height:66px;padding:6px;
+  background:#fffdf8;transition:background .15s,border-color .15s}
+.slot.over{background:var(--accent-soft);border-color:var(--accent)}
+.slot .slabel{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);
+  font-weight:700;margin:2px 2px 6px}
+.slot .card{min-height:0;padding:7px 8px;margin-bottom:6px}
+.slot .card h3{font-size:12.5px}
+.slot .card .meta{font-size:10.5px}
+.day-note{margin:0 8px 8px;font:inherit;font-size:12.5px;border:1px solid var(--line);border-radius:8px;
+  padding:7px;resize:vertical;min-height:38px;background:#fffdf8}
+.rm{position:absolute;top:4px;right:4px;border:0;background:rgba(255,255,255,.85);border-radius:50%;
+  width:22px;height:22px;font-size:13px;line-height:1;color:#a33}
+.summary{font-size:13px;color:var(--muted);background:var(--card);border:1px solid var(--line);
+  border-radius:10px;padding:8px 12px;display:inline-block}
+/* modal */
+.modal-veil{position:fixed;inset:0;background:rgba(40,32,22,.5);z-index:100;display:none;
+  align-items:flex-start;justify-content:center;padding:18px 12px;overflow-y:auto}
+.modal-veil.open{display:flex}
+.modal{background:var(--card);border-radius:18px;max-width:560px;width:100%;overflow:hidden;
+  box-shadow:0 12px 40px rgba(0,0,0,.25);max-height:calc(100vh - 40px);display:flex;flex-direction:column}
+.modal img.hero{width:100%;max-height:260px;object-fit:cover;display:block;background:#eee}
+.modal .mbody{padding:16px;overflow-y:auto}
+.modal h2{margin:0 0 4px;font-size:20px}
+.modal .mmeta{font-size:13px;color:var(--muted);margin-bottom:10px}
+.modal .tags{margin-bottom:10px}
+.modal h4{margin:14px 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.modal p{margin:6px 0;font-size:14.5px}
+.modal ul{margin:6px 0;padding-left:20px;font-size:14.5px}
+.modal li{margin-bottom:4px}
+.mclose{position:sticky;top:0;align-self:flex-end;margin:10px 10px 0;z-index:2}
+.prac{background:#faf6ee;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px}
+.prac div{margin:3px 0}
+.extlink{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
+/* setup overlay */
+#setupOverlay{position:fixed;inset:0;z-index:200;background:rgba(40,32,22,.55);display:none;
+  align-items:center;justify-content:center;padding:16px}
+#setupOverlay.open{display:flex}
+.setup-card{background:var(--card);border-radius:18px;max-width:520px;width:100%;padding:22px;
+  max-height:calc(100vh - 32px);overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+.setup-card h2{margin:0 0 6px}
+.setup-card p{font-size:14px;color:var(--muted)}
+.setup-card label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
+.setup-card input{width:100%;font:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:10px}
+.setup-card .row{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+#setupError{color:#a33;font-size:13px;margin-top:10px;min-height:18px}
+.setup-card ol{font-size:13.5px;color:var(--ink);padding-left:20px}
+.setup-card code{font-size:12px;background:#f1ece1;padding:1px 5px;border-radius:5px}
+footer{padding:18px;text-align:center;color:var(--muted);font-size:12px}
+@media (max-width:640px){
+  .pool-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+  h1{font-size:16px}
+}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+</head>
+<body>
+<header>
+  <div class="hrow">
+    <div>
+      <h1>UAE Trip Planner</h1>
+      <div class="sub">Dec 13–26, 2026 · Dubai base · shared board</div>
+    </div>
+    <span style="flex:1"></span>
+    <span class="pill" id="roomPill" title="Shared room">room: dubai-dec-2026</span>
+    <span class="pill" id="syncPill"><span class="dot"></span><span id="syncText">starting…</span></span>
+    <button class="iconbtn" id="btnExport" title="Download plan backup (JSON)">⤓</button>
+    <button class="iconbtn" id="btnSettings" title="Connection settings">⚙</button>
+  </div>
+</header>
+
+<main>
+  <section>
+    <div class="sec-head"><h2>Activity pool</h2><span class="hint" id="poolCount"></span></div>
+    <div class="filters">
+      <input type="search" id="poolSearch" placeholder="Search activities…" autocomplete="off">
+      <select id="areaFilter"><option value="">All areas</option></select>
+      <select id="tagFilter"><option value="">All vibes</option></select>
+    </div>
+    <div class="pool-grid" id="pool"></div>
+    <div class="hint" style="margin-top:8px;font-size:12px;color:var(--muted)">
+      Tap a card to see details. Drag it onto a day — or tap it, then tap a slot (tap again to cancel).
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>Your 14 days</h2><span class="hint">recommended plan, fully editable</span></div>
+    <div style="margin-bottom:10px"><span class="summary" id="summary"></span></div>
+    <div class="board-wrap"><div class="board" id="board"></div></div>
+  </section>
+</main>
+
+<div class="modal-veil" id="modalVeil">
+  <div class="modal" role="dialog" aria-modal="true">
+    <button class="iconbtn mclose" id="modalClose">✕</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<div id="setupOverlay">
+  <div class="setup-card">
+    <h2>Connect your shared planner</h2>
+    <p>This board syncs live between you and your wife through <b>Firebase Realtime Database</b> (free). One-time setup:</p>
+    <ol>
+      <li>Create a project at <b>console.firebase.google.com</b> (skip Analytics).</li>
+      <li>Left menu → <b>Build → Realtime Database</b> → Create database → start in <b>test mode</b>.</li>
+      <li>Gear icon → Project settings → <b>Your apps</b> → add a <b>Web app</b> (<code>&lt;/&gt;</code>) → copy the <code>firebaseConfig</code> values below.</li>
+      <li>Recommended database rules (Rules tab):<br><code>{ "rules": { "plans": { "$room": { ".read": true, ".write": true } } } }</code><br>
+      <span style="color:var(--muted)">Open to anyone with the link — fine for a trip plan; tighten later if you like.</span></li>
+    </ol>
+    <label>apiKey</label><input id="cfgApiKey" autocomplete="off" spellcheck="false">
+    <label>authDomain</label><input id="cfgAuthDomain" autocomplete="off" spellcheck="false" placeholder="your-project.firebaseapp.com">
+    <label>databaseURL</label><input id="cfgDbUrl" autocomplete="off" spellcheck="false" placeholder="https://your-project-default-rtdb.firebaseio.com">
+    <label>projectId</label><input id="cfgProjectId" autocomplete="off" spellcheck="false">
+    <label>Your name <span style="font-weight:400;color:var(--muted)">(shown as last editor, optional)</span></label>
+    <input id="cfgName" autocomplete="off" placeholder="e.g. Ahmed">
+    <div id="setupError"></div>
+    <div class="row">
+      <button class="btn" id="btnConnect">Connect &amp; sync</button>
+      <button class="btn ghost" id="btnOffline">Continue offline (this device only)</button>
+    </div>
+  </div>
+</div>
+
+<footer>Plans save automatically. Nothing here is booked — it’s your draft until you say so.</footer>
+
+<script>
+"use strict";
+/* ============================== constants ============================== */
+var AREAS = ["Dubai","Abu Dhabi","Sharjah","Hatta","Al Ain","Fujairah","Ras Al Khaimah","Umm Al Quwain","Al Dhafra","Desert"];
+var TAGS = ["family","couple","friends","rest","adventure","culture","food","chill"];
+var TAG_COLORS = {family:"#7c5cd6",couple:"#e2637e",friends:"#2e9e4f",rest:"#3d8bfd",
+  adventure:"#c26a1b",culture:"#a3548f",food:"#b98a2f",chill:"#0e7c7b"};
+var DAYS = [];
+(function(){
+  var wd = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  for (var i=0;i<14;i++){
+    var d = new Date(Date.UTC(2026,11,13+i));
+    var iso = d.toISOString().slice(0,10);
+    DAYS.push({iso:iso, wd:wd[d.getUTCDay()], label:d.getUTCDate()+" Dec"});
+  }
+})();
+var SLOTS = ["morning","afternoon","evening"];
+var SLOT_LABEL = {morning:"Morning",afternoon:"Afternoon",evening:"Evening"};
+
+/* ============================== helpers ============================== */
+function esc(s){
+  return String(s==null?"":s).replace(/[&<>"']/g,function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+}
+function $(id){ return document.getElementById(id); }
+function sanitizeRoom(r){
+  r = String(r||"").replace(/[^a-zA-Z0-9_-]/g,"").slice(0,64);
+  return r || "dubai-dec-2026";
+}
+var ROOM = sanitizeRoom(new URLSearchParams(location.search).get("room") || "dubai-dec-2026");
+
+/* ============================== catalog ============================== */
+var CATALOG = [];
+var BY_ID = {};
+function indexCatalog(){
+  BY_ID = {};
+  for (var i=0;i<CATALOG.length;i++) BY_ID[CATALOG[i].id] = CATALOG[i];
+}
+CATALOG.push([{"area": "Dubai", "description": "Free public beach in Umm Suqeim with direct views of the Burj Al Arab. Known for kitesurfing, a long running track, skate park, beach volleyball, and a strip of food trucks and cafés. Entry is free; lifeguards on duty sunrise to sunset.", "duration": "morning", "id": "kite-beach", "link": null, "location": "Umm Suqeim 1, off Jumeirah Beach Road — about 15 minutes by car from Downtown Dubai, near the Burj Al Arab.", "name": "Kite Beach morning", "photo": null, "practical": {"bookAhead": false, "fee": "Free entry; rentals and lessons extra", "note": "Go early morning for cooler weather and parking."}, "tags": ["family", "friends", "adventure", "chill"], "todo": ["Take a kitesurfing lesson or watch riders from the sand", "Jog or walk the beachfront running track", "Grab breakfast at a beach café or food truck", "Swim in the marked swimming zones", "Photograph the Burj Al Arab from the shoreline"]}, {"area": "Dubai", "description": "The Walk at JBR is a 1.7 km beachfront promenade lined with restaurants, cafés and shops, backed by the JBR residential towers. Next to it, Dubai Marina Walk loops the marina basin past yachts and towers. Both come alive after sunset with street performers and outdoor dining.", "duration": "evening", "id": "jbr-marina", "link": null, "location": "Jumeirah Beach Residence / Dubai Marina. Dubai Tram to JBR 1 or JBR 2 stations, or Metro Red Line to DMCC then tram.", "name": "JBR & Dubai Marina evening", "photo": "https://upload.wikimedia.org/wikipedia/commons/1/1e/Beach_%40_Jumeirah_Beach_Residence_%40_Dubai_Marina_%2815664747178%29.jpg", "practical": {"bookAhead": false, "fee": "Free to wander", "note": "Best from late afternoon into evening."}, "tags": ["family", "couple", "friends", "food", "chill"], "todo": ["Sunset stroll along The Walk at JBR", "Dinner at a beachfront restaurant with sea views", "Walk the Marina Walk promenade past the yachts", "See Ain Dubai lit up across the water", "Browse the shops and street performers on The Walk"]}, {"area": "Dubai", "description": "Al Fahidi Historical Neighbourhood is Dubai's preserved 19th-century quarter of wind-tower houses, museums and cultural centres along Dubai Creek. A traditional wooden abra water taxi crosses the creek between Bur Dubai and Deira for AED 1, passing working cargo dhows.", "duration": "half-day", "id": "old-dubai", "link": null, "location": "Al Fahidi, Bur Dubai, along Dubai Creek. Metro Red Line to Al Fahidi station; abra stations at Bur Dubai and Deira creekside.", "name": "Old Dubai — Al Fahidi, souks & abra", "photo": "https://upload.wikimedia.org/wikipedia/commons/6/6b/Dubai_Museum_and_Al_Fahidi_Fort.jpg", "practical": {"bookAhead": false, "fee": "Free to explore; abra AED 1 cash only", "note": "Combine with the Gold and Spice Souqs across the creek in Deira."}, "tags": ["family", "couple", "culture"], "todo": ["Wander the wind-tower lanes and art galleries of Al Fahidi", "Visit the Coins Museum and the SMCCU cultural centre", "Take tea at the Arabian Tea House", "Ride an abra across Dubai Creek (AED 1, cash)", "Watch the wooden dhows loading cargo on the creek"]}, {"area": "Dubai", "description": "Two historic covered markets in Deira, a short walk apart. The Gold Souq has hundreds of shop windows glittering with gold jewellery; the Spice Souq is piled with saffron, sumac, dried fruits, oud and perfumes. Haggling is expected and part of the experience.", "duration": "half-day", "id": "gold-spice-souq", "link": null, "location": "Deira, near Al Ras Metro station (Green Line); or cross Dubai Creek by abra from Bur Dubai.", "name": "Gold Souq & Spice Souq", "photo": "https://upload.wikimedia.org/wikipedia/commons/a/ad/Dubai_Gold_Souk_on_31_May_2007_Pict_2.jpg", "practical": {"bookAhead": false, "fee": "Free entry", "note": "Mostly open Sat–Thu ~10am–10pm; closed Friday mornings, reopening around 4pm."}, "tags": ["family", "couple", "culture"], "todo": ["Browse the gold shop windows and compare the daily gold rate", "Buy saffron, spices and dates at the Spice Souq", "Haggle — start around half the asking price", "Sample Arabic coffee and dates from vendors", "Arrive by abra for the classic old-Dubai approach"]}, {"area": "Dubai", "description": "Seasonal open-air park running Season 31 from 14 October 2026 to May 2027, with 29 country pavilions representing 90+ cultures, street food from around the world, the Carnaval rides area and tens of thousands of shows across the season. Open evenings only, from 4pm.", "duration": "evening", "id": "global-village", "link": "https://www.globalvillage.ae/", "location": "Sheikh Mohammed Bin Zayed Road (E311), Dubailand. No metro — RTA buses run from Mall of the Emirates; taxi ~25–30 min from Downtown.", "name": "Global Village", "photo": null, "practical": {"bookAhead": false, "fee": "AED 25 Mon–Thu; AED 30 Fri–Sun; under 3 free", "note": "Sun–Wed 4pm–12am, Thu–Sat 4pm–1am. Tuesdays are families/couples/ladies only. Tickets at the gate; ~10% off online."}, "tags": ["family", "friends", "food", "culture"], "todo": ["Pavilion-hop through country pavilions (Turkey, India, Japan, Egypt)", "Do a street-food crawl", "Ride the Carnaval attractions", "Catch a main-stage or stunt show", "Collect stamps in the Season 31 pavilion passport"]}, {"area": "Dubai", "description": "The world's tallest building at 828 m. At The Top (levels 124 and 125) has indoor galleries and an open-air terrace with 360-degree views over Dubai. Sunset slots are the most popular and sell out well ahead.", "duration": "evening", "id": "burj-khalifa", "link": "https://www.burjkhalifa.ae", "location": "Downtown Dubai; entrance inside Dubai Mall (lower ground level). Metro Red Line to Burj Khalifa/Dubai Mall.", "name": "Burj Khalifa — At The Top sunset", "photo": "https://upload.wikimedia.org/wikipedia/commons/7/7f/View_of_Dubay_from_145th_floor_of_Burdj_al_Khalifa_6.jpg", "practical": {"bookAhead": true, "fee": "At The Top (124 & 125) from AED 189; prime/sunset slots higher (~AED 250); SKY 148 from AED 399", "note": "Sunset slots sell out — book 1–2 weeks ahead in December. Arrive 60–90 min before sunset."}, "tags": ["couple", "family"], "todo": ["Book a sunset time slot online well in advance", "Watch golden hour from the level 124 outdoor terrace", "Spot the Dubai Fountain shows from above in the evening", "Stay on as the city lights come up", "Visit the exhibits on the tower's construction on level 125"]}, {"area": "Dubai", "description": "One of the world's largest malls with 1,200+ shops, the Dubai Aquarium, an Olympic ice rink and the indoor waterfall with diving figures. It sits beside the Burj Khalifa and the Burj Lake fountain promenade. The Dubai Shopping Festival is expected to run through the trip dates.", "duration": "half-day", "id": "dubai-mall", "link": "https://thedubaimall.com/", "location": "Downtown Dubai, next to the Burj Khalifa. Metro Red Line to Burj Khalifa/Dubai Mall.", "name": "Dubai Mall & DSF wandering", "photo": "https://upload.wikimedia.org/wikipedia/commons/1/15/Dubai_MALL_Waterfalls.jpg", "practical": {"bookAhead": false, "fee": "Free entry; attractions ticketed separately", "note": "Mall hours ~10am–11pm (to midnight Thu–Sat). Dubai Shopping Festival expected Dec 2026–Jan 2027 (reported Dec 5, 2026–Jan 11, 2027; exact dates TBC)."}, "tags": ["family", "friends", "food", "chill"], "todo": ["See the indoor waterfall with its silver diver sculptures", "Walk through the Dubai Aquarium tunnel", "Watch the Dubai Fountain evening shows from the promenade", "Browse DSF sale deals across the mall", "Dinner with fountain views on the waterfront terrace"]}, {"area": "Dubai", "description": "A 150 m tall golden picture frame in Zabeel Park. The Sky Deck's glass floor looks straight down 150 m to the park; one side frames old Dubai to the north, the other the modern skyline to the south. The visit runs through a Past Gallery on Dubai's history and a Future Gallery.", "duration": "morning", "id": "dubai-frame", "link": null, "location": "Zabeel Park, Gate 4. Metro Red Line to Al Jafiliya, then ~10 min walk or short taxi to Gate 4.", "name": "Dubai Frame", "photo": null, "practical": {"bookAhead": true, "fee": "AED 50 adult; AED 20 child (3–12); under 3 free", "note": "Open daily 8am–9pm (official site: dubaiframe.ae). Book a timed slot online; respectful clothing required."}, "tags": ["family", "couple", "culture"], "todo": ["Walk the glass-floored Sky Deck bridge", "Compare the old-Dubai and new-Dubai panoramas from each side", "Go through the Past Gallery's multimedia history of Dubai", "Ride the panoramic glass elevator up 48 floors", "Finish in the Future Gallery's vision of Dubai in 50 years"]}, {"area": "Dubai", "description": "The world's largest natural flower garden, open for Season 15 from 8 October 2026 to 31 May 2027. Over 150 million flowers form giant sculptures including a full-size Emirates A380, the heart-shaped tunnel and a floral castle. Flat, shaded paths make it an easy half-day.", "duration": "morning", "id": "miracle-garden", "link": "https://www.dubaimiraclegarden.com", "location": "Al Barsha South 3, Dubailand. No nearby metro — taxi ~20–25 min from Marina/Downtown, or RTA bus 105 from Mall of the Emirates. Free parking.", "name": "Miracle Garden", "photo": "https://upload.wikimedia.org/wikipedia/commons/b/b1/Miracle_garden.jpg", "practical": {"bookAhead": false, "fee": "AED 100 adult; AED 80 child (3–12); under 3 free (excl. VAT)", "note": "Open daily 9am–9pm, weekends to 11pm. December is peak bloom season; never go midday."}, "tags": ["family", "couple", "chill"], "todo": ["See the flower-covered Emirates A380", "Walk the heart-shaped tunnel", "Explore the floral castle and Disney Avenue", "Add the Butterfly Garden next door (combo ticket AED 140)", "Go at 9am opening for empty paths or after 5pm for the lights"]}, {"area": "Dubai", "description": "The torus-shaped landmark on Sheikh Zayed Road wrapped in Arabic calligraphy, housing immersive exhibitions on space, climate and future technology (OSS Hope space station, Al Waha wellness floor). IMPORTANT: reported closed since 1 Sept 2026 for a major exhibition overhaul, reopening Q1 2027 — likely closed during this trip.", "duration": "morning", "id": "motf", "link": "https://museumofthefuture.ae", "location": "Sheikh Zayed Road, next to Emirates Towers. Metro Red Line to Emirates Towers.", "name": "Museum of the Future", "photo": null, "practical": {"bookAhead": true, "fee": "AED 169 (2026 pre-closure rate)", "note": "Reported closed 1 Sept 2026–Q1 2027 for exhibition overhaul — verify on museumofthefuture.ae before visiting. When open, slots sell out weeks ahead."}, "tags": ["family", "couple", "culture"], "todo": ["Check the official site for reopening status before planning", "If open: book a timed slot online (they sell out weeks ahead)", "Tour the OSS Hope space station exhibit", "Visit the Al Waha wellness floor", "Photograph the calligraphy facade at night"]}, {"area": "Dubai", "description": "The legacy site of Expo 2020, now a permanent district. Al Wasl Plaza's giant dome hosts 360-degree projection shows; the Terra (sustainability) and Alif (mobility) pavilions remain open. Public areas, parks and the Surreal water feature are free and open around the clock.", "duration": "half-day", "id": "expo-city", "link": "https://www.expocitydubai.com/", "location": "Dubai South, off the E77. Metro Red Line to Expo City station.", "name": "Expo City Dubai", "photo": null, "practical": {"bookAhead": false, "fee": "Terra and Alif AED 50 each; Attractions Pass AED 120; public areas free", "note": "Public areas open 24/7 and free; ticketed pavilions generally 10am–6pm. Large site — wear comfortable shoes."}, "tags": ["family", "culture", "chill"], "todo": ["See the Al Wasl Plaza dome and its projection show", "Tour Terra — the Sustainability Pavilion", "Tour Alif — the Mobility Pavilion", "Watch the Surreal water-fire-music feature", "Ride the Garden in the Sky rotating observation tower"]}, {"area": "Dubai", "description": "The Sheikh Mohammed Centre for Cultural Understanding hosts a traditional Emirati breakfast in its wind-tower house in Al Fahidi. Over 1.5 hours, Emirati presenters serve local dishes and lead an open Q&A on Emirati culture, customs and Islam — 'open doors, open minds'.", "duration": "morning", "id": "smccu-breakfast", "link": "https://www.cultures.ae", "location": "SMCCU wind-tower house, Al Fahidi Historical Neighbourhood, Bur Dubai. Metro Red Line to Al Fahidi.", "name": "SMCCU cultural breakfast", "photo": null, "practical": {"bookAhead": true, "fee": "AED 130 per person", "note": "Breakfast sessions Monday & Wednesday 9:00am, 1.5 hours. Prior booking required."}, "tags": ["culture", "food", "family", "couple"], "todo": ["Book ahead — sessions run Monday and Wednesday at 9am", "Enjoy the Emirati breakfast spread with Arabic coffee and dates", "Ask the Emirati presenter anything in the open Q&A", "Tour the traditional wind-tower house", "Combine with a walk through Al Fahidi afterwards"]}, {"area": "Dubai", "description": "One of the few mosques in the UAE open to non-Muslim visitors, run by the SMCCU under its 'Open Doors, Open Minds' programme. The white-stone Fatimid-style mosque with twin minarets hosts guided tours covering the five pillars of Islam, with Emirati refreshments and open Q&A.", "duration": "morning", "id": "jumeirah-mosque", "link": "https://www.jumeirahmosque.ae/", "location": "Jumeirah Beach Road, Jumeirah 1. Best reached by taxi; on the coastal road between the old town and the Marina.", "name": "Jumeirah Mosque guided tour", "photo": "https://upload.wikimedia.org/wikipedia/commons/8/8a/Moschea_Jumeirah.jpg", "practical": {"bookAhead": false, "fee": "AED 45 incl. refreshments", "note": "Tours Sat–Thu at 10am and 2pm; closed Fridays. No booking needed for public visits. Modest dress required — women should bring a headscarf; abayas available to borrow."}, "tags": ["culture", "family", "couple"], "todo": ["Join the 10am guided tour (registration 30 min before)", "Learn about the five pillars of Islam from the guide", "Enjoy Arabic coffee, dates and light refreshments", "Photograph the domes and minarets inside and out", "Ask questions in the open Q&A session"]}, {"area": "Dubai", "description": "A traditional hammam afternoon — the standout is Talise Ottoman Spa at Jumeirah Zabeel Saray on Palm Jumeirah, one of the Middle East's largest spas, built like an Ottoman palace with marble hammam suites, thalassotherapy pools and a snow room. A low-key, active rest-day option.", "duration": "half-day", "id": "hammam-spa", "link": "https://www.jumeirah.com", "location": "Talise Ottoman Spa, Jumeirah Zabeel Saray, West Crescent, Palm Jumeirah. Taxi or Palm Monorail.", "name": "Hammam / spa afternoon", "photo": null, "practical": {"bookAhead": true, "fee": "Royal Ottoman Hammam 60-min ~AED 920; treatments from ~AED 580", "note": "Spa open Mon–Fri 11am–9:30pm, weekends from 10am. Advance booking required; swimwear worn in mixed areas."}, "tags": ["rest", "couple", "chill"], "todo": ["Book the Royal Ottoman Hammam (kese scrub and foam massage)", "Float in the thalassotherapy pools", "Try the snow room between heat sessions", "Unwind in the relaxation lounges with herbal tea", "Add a massage or afternoon tea to round out the visit"]}, {"area": "Dubai", "description": "Dubai's contemporary arts district in the Al Quoz industrial area — converted warehouses holding 90+ galleries, studios, an indie cinema (Cinema Akil), design shops, cafés and a chocolate factory. Gallery entry is generally free; exhibitions rotate every few months.", "duration": "half-day", "id": "alserkal", "link": "https://alserkal.online/", "location": "17th Street, Al Quoz 1, behind Times Square Center. Taxi easiest; nearest metro Noor Bank then a short taxi.", "name": "Alserkal Avenue", "photo": null, "practical": {"bookAhead": false, "fee": "Free entry to most galleries", "note": "Galleries generally open 10am–7pm. Check alserkal.online for current exhibitions and evening events."}, "tags": ["culture", "chill", "friends", "couple"], "todo": ["Gallery-hop the warehouse spaces (check what's on that week)", "Catch a film at the indie Cinema Akil", "Coffee at a warehouse café", "Visit the Mirzam chocolate factory", "Browse the design and book shops"]}, {"area": "Dubai", "description": "An Arabian-style bazaar inside the Madinat Jumeirah resort, with wind towers, lantern-lit lanes and 3 km of waterways crossed by traditional abra boats. Over 20 restaurants and cafés line the canals, many with terraces facing the Burj Al Arab. Free to enter and wander.", "duration": "evening", "id": "souk-madinat", "link": "https://www.jumeirah.com/en/collection/madinat-jumeirah", "location": "Madinat Jumeirah resort, King Salman Bin Abdulaziz Al Saud St, Umm Suqeim. Taxi; ~20 min from Dubai Marina. Self-parking and valet available.", "name": "Souk Madinat Jumeirah", "photo": null, "practical": {"bookAhead": false, "fee": "Free entry; abra tours paid (full tour ~AED 100, Burj-view tour ~AED 50)", "note": "Shops 10am–11pm; restaurants 8am–2am. Magical at night with the lights on the water."}, "tags": ["couple", "family", "food", "chill"], "todo": ["Browse the boutiques for souvenirs, oud and jewellery", "Take an abra ride along the resort waterways", "Dinner on a canal-side terrace", "Photograph the Burj Al Arab from the waterfront", "Check the Madinat Theatre programme for evening shows"]}, {"area": "Dubai", "description": "Observation deck on level 52 of the Palm Tower, 240 m up — the only viewpoint showing the full palm-tree shape of Palm Jumeirah at once. The visit starts with the View Exhibition and an immersive theatre on how the island was built, then the 360-degree indoor/outdoor deck.", "duration": "evening", "id": "view-palm", "link": null, "location": "The Palm Tower, via Nakheel Mall, Palm Jumeirah. Palm Monorail to Nakheel Mall station, or taxi.", "name": "The View at the Palm", "photo": null, "practical": {"bookAhead": true, "fee": "Standard from ~AED 100 (non-prime); prime sunset hours higher", "note": "From Oct 2026 hours reported as 9am–7pm; prime hours ~3:30–6:30pm. Sunset slots sell out — book online ahead."}, "tags": ["couple", "family"], "todo": ["Book a sunset prime-hour slot online", "Watch the immersive theatre on the Palm's construction", "Spot Atlantis, the fronds and the Dubai skyline from the terrace", "Time it to see the island light up after dark", "Grab coffee at the deck café"]}, {"area": "Dubai", "description": "The world's tallest observation wheel at 250 m on Bluewaters Island, with 48 air-conditioned cabins and a ~38-minute rotation. Views span Palm Jumeirah, Dubai Marina, the Burj Al Arab and the skyline; the wheel runs a LED light show at night.", "duration": "evening", "id": "ain-dubai", "link": null, "location": "Bluewaters Island, off JBR. Walk the pedestrian bridge from The Beach at JBR, or taxi.", "name": "Ain Dubai", "photo": null, "practical": {"bookAhead": true, "fee": "From AED 145 (Views); premium/VIP cabins higher", "note": "Open daily ~10am–9pm (last entry ~8:15pm). Bookings must be made at least 72 hours ahead; sunset slots go first."}, "tags": ["couple", "family"], "todo": ["Book a sunset slot for day-to-night views", "Ride the full ~38-minute rotation", "Spot Palm Jumeirah, the Marina and Burj Al Arab from the top", "Dinner at a Bluewaters restaurant after the ride", "See the wheel's LED light show after dark"]}]);
+CATALOG.push(
+{"area": "Dubai", "description": "Dubai's signature weekend ritual: since the UAE weekend runs Friday–Saturday, Friday brunch is a multi-hour social lunch, typically 1–4pm, hosted by hotels and restaurants citywide. Expect lavish international buffets, live cooking stations and entertainment, with packages ranging from family-friendly to full party mode.", "duration": "half-day", "id": "friday-brunch", "link": null, "location": "Citywide — hotels and restaurants; popular brunch hubs in Jumeirah, Dubai Marina, Palm Jumeirah and Downtown Dubai", "name": "Friday brunch", "photo": null, "practical": {"bookAhead": true, "fee": null, "note": "No single official site; most brunches run ~1–4pm Fridays and sell out — reserve days ahead"}, "tags": ["family", "friends", "food", "chill"], "todo": ["Pick a venue matching your vibe and book ahead", "Dress smart-casual", "Arrive hungry — plan 3+ hours", "Book a table near a terrace or view if available"]},
+{"area": "Dubai", "description": "A legendary no-frills Pakistani diner in Al Satwa, running since the late 1970s and beloved by residents and visiting celebrities alike. Famous for rich curries, kebabs and fresh tandoori bread at budget prices, served in a humble dining room and on the pavement outside.", "duration": "evening", "id": "ravis", "link": null, "location": "8 9th St, Al Satwa — by Satwa bus station; reachable by bus or taxi, no nearby metro", "name": "Ravi's, Al Satwa", "photo": null, "practical": {"bookAhead": false, "fee": null, "note": "Budget spot; open very late (till ~2–3am); walk-ins only"}, "tags": ["family", "friends", "food"], "todo": ["Order the chicken kadai or mutton peshawari", "Get daal fry with fresh naan", "Try the lentils-and-bread breakfast if going early", "Finish with doodh patti chai"]},
+{"area": "Dubai", "description": "A traditional Emirati restaurant and café set in a wind-tower house in the Al Fahidi historic district, established in 1997. Its white-and-blue courtyard serves Emirati breakfasts, mezze, grills and karak chai in one of the most photogenic old-Dubai settings.", "duration": "half-day", "id": "arabian-tea-house", "link": "http://www.arabianteahouse.com/", "location": "Al Fahidi St, Al Bastakiya, Bur Dubai — opposite Musalla Post Office; Al Fahidi metro (Green Line), then a short walk", "name": "Arabian Tea House", "photo": null, "practical": {"bookAhead": false, "fee": null, "note": "Open daily 7am–11pm; walk-ins welcome, reservable for groups"}, "tags": ["couple", "family", "culture", "food", "chill"], "todo": ["Order the Emirati breakfast spread", "Sip karak chai in the courtyard", "Try hummus with freshly baked bread", "Stroll the Bastakiya lanes and Dubai Creek after"]},
+{"area": "Dubai", "description": "A 43,000 sq ft food hall in Souk Al Bahar, Downtown Dubai, with 17 chef-led kitchens and three bars curated by Time Out's editors. Its wraparound terrace overlooks the Dubai Fountain and Burj Khalifa, making it ideal for grazing across cuisines in one evening.", "duration": "evening", "id": "timeout-market", "link": "https://www.timeout.com/time-out-market-dubai", "location": "Souk Al Bahar, Downtown Dubai — beside Dubai Mall; Burj Khalifa/Dubai Mall metro (Red Line)", "name": "Time Out Market Dubai", "photo": null, "practical": {"bookAhead": false, "fee": null, "note": "Free entry; seating is walk-in only, no reservations"}, "tags": ["friends", "family", "food", "chill"], "todo": ["Graze across several kitchens instead of one big meal", "Time your visit for the evening fountain shows from the terrace", "Try homegrown vendors like Pitfire Pizza", "Grab dessert from the pastry vendors"]},
+{"area": "Dubai", "description": "The waterpark at Atlantis The Palm on Palm Jumeirah, with 105+ slides and attractions across three towers. Headliners include the near-vertical Leap of Faith through a shark lagoon, plus a private beach, lazy rivers and the Lost Chambers Aquarium.", "duration": "full-day", "id": "aquaventure", "link": "https://www.atlantis.com/dubai/atlantis-aquaventure", "location": "Atlantis The Palm, Palm Jumeirah — Palm Monorail to Atlantis Aquaventure station", "name": "Aquaventure Waterpark", "photo": null, "practical": {"bookAhead": true, "fee": "From AED 360", "note": "Tickets must be booked online in advance for a specific date; not sold at the gate"}, "tags": ["family", "friends", "adventure"], "todo": ["Ride the Leap of Faith", "Float the 2.3km lazy river", "Try Aquaconda and Poseidon's Revenge", "Visit the Lost Chambers Aquarium", "Unwind on the private beach"]},
+{"area": "Dubai", "description": "The Middle East's first indoor ski resort, inside Mall of the Emirates, with 22,500 sqm of real snow, five slopes including an indoor black run, and a Snow Park with sledding, tubing and penguin encounters. All clothing and gear are included with admission.", "duration": "half-day", "id": "ski-dubai", "link": "https://www.skidxb.com/", "location": "Mall of the Emirates, Sheikh Zayed Rd, Al Barsha — Mall of the Emirates metro (Red Line)", "name": "Ski Dubai", "photo": "https://upload.wikimedia.org/wikipedia/commons/8/87/Dubai-Ski-Dubai-11.JPG", "practical": {"bookAhead": false, "fee": "From AED 240 (2-hour slope pass)", "note": "Gear and winter clothing included; booking online gets discounts"}, "tags": ["family", "friends", "adventure"], "todo": ["Take a 2-hour slope session", "Explore the Snow Park rides", "Book the penguin encounter", "Ride the chairlift for the view"]},
+{"area": "Dubai", "description": "The world's deepest diving pool at 60m, in Nad Al Sheba, built as a sunken city with furnished apartments, a car, arcade games and street scenes to explore underwater. Offers scuba, freediving and snorkelling experiences for beginners through to certified divers.", "duration": "half-day", "id": "deep-dive", "link": "https://deepdivedubai.com/", "location": "NAS Sports Complex, Nad Al Sheba 1 — taxi only, no metro access", "name": "Deep Dive Dubai", "photo": null, "practical": {"bookAhead": true, "fee": "From AED 400 (snorkelling)", "note": "Dives run in booked session slots; minimum age 10 for scuba, 6 for snorkelling"}, "tags": ["adventure", "friends", "couple"], "todo": ["Try the Discover scuba session (no certification needed)", "Snorkel the sunken city surface", "Attempt a freediving intro", "Watch divers from the viewing windows/restaurant"]},
+{"area": "Dubai", "description": "An evening dinner cruise aboard a traditional wooden dhow through Dubai Marina, with an international buffet, soft drinks and live Tanoura dance entertainment. The route passes the Marina skyline, JBR and Ain Dubai on a ~2-hour sail.", "duration": "evening", "id": "dhow-cruise", "link": null, "location": "Boarding jetties at Dubai Marina (near JBR waterfront); DMCC or Sobha Realty metro, then tram/taxi", "name": "Marina dhow cruise dinner", "photo": "https://upload.wikimedia.org/wikipedia/commons/d/d2/Dhow_restaurant.JPG", "practical": {"bookAhead": true, "fee": "From ~AED 149/person", "note": "Boarding ~8:15pm, sail ~2 hours; smart casual; many operators — no single official site"}, "tags": ["couple", "family", "food", "chill"], "todo": ["Claim an upper-deck spot for skyline photos", "Enjoy the buffet dinner", "Watch the Tanoura dance performance", "Photograph Ain Dubai lit up at night"]},
+{"area": "Dubai", "description": "A 2,000-seat multi-format performing arts venue in Downtown Dubai, designed in the shape of a traditional dhow. It hosts opera, ballet, concerts and theatre; the Dec 13–26, 2026 window includes pianist Denis Matsuev (Dec 16) and Gulf theatre production Abracadabra (Dec 18–19).", "duration": "evening", "id": "dubai-opera", "link": "https://www.dubaiopera.com", "location": "Sheikh Mohammed bin Rashid Blvd, Downtown Dubai — by Burj Khalifa/Dubai Mall; metro Burj Khalifa/Dubai Mall", "name": "Dubai Opera show", "photo": "https://upload.wikimedia.org/wikipedia/commons/7/77/Dubai_Opera.jpg", "practical": {"bookAhead": true, "fee": null, "note": "Prices vary by show; book via dubaiopera.com; under-16s must be accompanied by an adult"}, "tags": ["couple", "culture"], "todo": ["Check the programme and book seats early", "Arrive early for the foyer and views", "Dine nearby before the show", "Note latecomers are seated only at breaks"]},
+{"area": "Dubai", "description": "The region's first permanent aqua show at Al Habtoor City, created by Franco Dragone. 65 artists perform aerial stunts, high dives and aquatics on a 2.7-million-litre water stage in a 90-minute show inspired by Dubai's pearl-diving heritage.", "duration": "evening", "id": "la-perle", "link": "https://www.laperle.com/", "location": "Al Habtoor City, 260 Sheikh Zayed Rd — Business Bay metro (Red Line), then a short taxi", "name": "La Perle show", "photo": null, "practical": {"bookAhead": true, "fee": "From AED 125", "note": "Two shows nightly, Tue–Sat; closed Sun & Mon; smart casual; under-2s not recommended"}, "tags": ["family", "couple", "culture"], "todo": ["Book Bronze/Silver or higher seats", "Arrive 45 minutes early", "Avoid the front splash rows if dressed smart", "Pair with dinner in Al Habtoor City"]},
+{"area": "Dubai", "description": "A Hollywood-inspired theme park at Dubai Parks and Resorts with 29 rides and attractions across DreamWorks, Columbia Pictures, Lionsgate and Smurfs zones — from the Dragon Gliders coaster to the Hunger Games Capitol Bullet Train.", "duration": "full-day", "id": "motiongate", "link": "https://www.motiongatedubai.com/", "location": "Dubai Parks and Resorts, Sheikh Zayed Rd (Jebel Ali) — metro to Ibn Battuta or UAE Exchange, then taxi/shuttle", "name": "Motiongate Dubai", "photo": null, "practical": {"bookAhead": false, "fee": "From AED 295", "note": "Season reopens Oct 7, 2026; buy online to skip queues; kids under 3 free"}, "tags": ["family", "friends"], "todo": ["Ride Dragon Gliders and Madagascar Mad Pursuit", "Try the Hunger Games coaster", "Explore the Smurfs Village", "Catch a live character show"]},
+{"area": "Dubai", "description": "One of the world's largest indoor theme parks — 1.5M sq ft, fully air-conditioned — on Sheikh Mohammed bin Zayed Road. Six zones include Marvel, Cartoon Network and the dinosaur-themed Lost Valley with the Velociraptor coaster.", "duration": "full-day", "id": "img-worlds", "link": "https://www.imgworlds.com/", "location": "City of Arabia, Sheikh Mohammed bin Zayed Rd (E311) — taxi; no direct metro", "name": "IMG Worlds of Adventure", "photo": "https://upload.wikimedia.org/wikipedia/commons/3/3b/Velociraptor_(IMG_Worlds_of_Adventure)_2018_01.jpg", "practical": {"bookAhead": true, "fee": null, "note": "Book in advance, especially weekends; Fast Track passes available for shorter queues"}, "tags": ["family", "friends"], "todo": ["Ride the Velociraptor coaster", "Try the Avengers battle ride", "Explore Lost Valley's animatronic dinosaurs", "Brave the Haunted Hotel"]},
+{"area": "Dubai", "description": "A 40,000 sq ft immersive light-and-sound park at Wafi City with 12 interactive zones — projection-mapped gardens, mirrored chambers and cosmic art you can walk through and photograph. A relaxed 1–2 hour indoor experience.", "duration": "half-day", "id": "aya-universe", "link": "https://www.aya-universe.com/", "location": "Level One, Main Atrium, Wafi City, Oud Metha Rd — Dubai Healthcare City metro (Green Line), ~6-min walk", "name": "AYA Universe", "photo": null, "practical": {"bookAhead": true, "fee": null, "note": "Open Sun–Thu 10am–10pm, Fri–Sat 10am–midnight; advance online booking recommended"}, "tags": ["family", "couple", "friends", "chill"], "todo": ["Wander the Flora light garden", "Photograph the Luna mirrored chamber", "Play with the Aurora touch-lights", "Watch the reversed waterfalls at The Falls"]},
+{"area": "Dubai", "description": "A tandem skydive over Palm Jumeirah from up to 13,000 ft, freefalling at ~193 km/h with views of the Palm, Dubai Marina skyline and Atlantis. The flagship Palm Drop Zone package includes professional photos and video of the jump.", "duration": "morning", "id": "skydive", "link": "https://www.skydivedubai.ae", "location": "Al Seyahi St, Dubai Marina — near Zero Gravity; Sobha Realty metro, then tram/taxi", "name": "Skydive Dubai tandem", "photo": "https://upload.wikimedia.org/wikipedia/commons/6/6f/Skydiving_over_Palm_Jumeirah.jpg", "practical": {"bookAhead": true, "fee": "AED 2,499 (tandem over the Palm incl. photos & video)", "note": "Weather-dependent — jumps can be rescheduled; book 2–3 weeks ahead; minimum age 18; strict weight limits"}, "tags": ["adventure", "friends", "couple"], "todo": ["Book the tandem over the Palm", "Meet ID, age and weight/BMI requirements", "Pick a morning slot for calmer air", "Arrive at least an hour early for briefing"]},
+{"area": "Dubai", "description": "Emaar's waterfront district on Dubai Creek, with a 6km promenade, art installations and wide sunset views across the water to the Downtown skyline. Noticeably calmer than the Marina, with cafés along the walk and the under-construction Dubai Creek Tower as a landmark.", "duration": "evening", "id": "creek-harbour", "link": null, "location": "Dubai Creek Harbour, off Ras Al Khor Rd — taxi; ~15 min from Dubai Mall", "name": "Dubai Creek Harbour sunset", "photo": null, "practical": {"bookAhead": false, "fee": null, "note": "Free public promenade; no single attraction website; best experienced at sunset"}, "tags": ["couple", "chill", "rest"], "todo": ["Walk the promenade at golden hour", "Photograph the Downtown skyline across the creek", "Stop at a waterfront café", "Pair with daytime flamingo spotting at nearby Ras Al Khor"]},
+{"area": "Dubai", "description": "A 119-hectare wildlife park in Al Warqa with 3,000+ animals across six zones: African and Asian villages, Explorer Village, Arabian Desert Safari, Kids Farm and Al Wadi. Season 8 runs Oct 12, 2026 – May 31, 2027; the park closes over summer.", "duration": "half-day", "id": "dubai-safari-park", "link": "https://dubaisafari.ae", "location": "Al Warqa 5, on E44 (Hatta Rd) opposite Dragon Mart — taxi; no metro access", "name": "Dubai Safari Park", "photo": null, "practical": {"bookAhead": true, "fee": "From AED 50 (Safari Park Pass)", "note": "Open daily 9am–6pm, last entry 5pm; allow 4–5 hours; under-3s free"}, "tags": ["family", "couple", "chill"], "todo": ["Take the Explorer Safari truck ride", "Do the Arabian Desert Safari", "Catch the animal live presentations", "Visit Kids Farm and the giraffe feeding"]},
+{"area": "Dubai", "description": "An indoor tropical rainforest biodome at City Walk housing 3,000+ plants and animals across four levels — from canopy birds down to the flooded rainforest floor. Offers sloth encounters, a bat cave and zookeeper experiences in a climate-controlled dome.", "duration": "half-day", "id": "green-planet", "link": "https://www.thegreenplanetdubai.com/", "location": "City Walk, Al Wasl Rd — Burj Khalifa/Dubai Mall metro, then taxi or short walk", "name": "The Green Planet", "photo": null, "practical": {"bookAhead": false, "fee": "AED 175 adult day pass", "note": "Open daily 10am–6pm; online ticket sales close 3:30pm"}, "tags": ["family", "couple", "chill"], "todo": ["Walk the canopy level", "Book the sloth encounter", "Explore the bat cave", "Watch a feeding session"]},
+{"area": "Dubai", "description": "A dedicated desert cycle track through the Al Marmoom reserve near Bab Al Shams — about 86km of routes with a 50km main loop, popular for sunrise rides past dunes, lakes and wildlife. The on-site Trek store rents bikes and gear.", "duration": "morning", "id": "al-qudra-cycling", "link": null, "location": "Al Qudra Rd, near Bab Al Shams — taxi only; park at the track car park", "name": "Al Qudra cycling track", "photo": null, "practical": {"bookAhead": false, "fee": null, "note": "Track is free and open 24/7; rentals from the on-site Trek store (paid); ride early morning"}, "tags": ["adventure", "friends", "couple"], "todo": ["Ride at sunrise to beat the heat", "Rent a bike at the Trek store", "Detour to Love Lake", "Refuel at the track-side cafés"]}
+);
+CATALOG.push([{"area": "Abu Dhabi", "description": "One of the world's largest mosques, completed in 2007, with 82 white marble domes and the world's largest hand-knotted carpet. Non-worshipper visits are self-guided or via free guided tours.", "duration": "half-day", "id": "grand-mosque", "link": "https://www.szgmc.gov.ae", "location": "Al Rawdah district on Sheikh Rashid Bin Saeed St (Airport Rd), ~20 minutes from the Corniche by car or taxi.", "name": "Sheikh Zayed Grand Mosque", "photo": null, "practical": {"bookAhead": true, "fee": "Dhs10 non-UAE visitors; Dhs5 with Emirates ID; free for 60+ and worshippers", "note": "Sat–Thu 9am–8:30pm; Fri 9–11:30am and 2:30–8:30pm. Strict modest dress code; abayas no longer loaned free — buy one for Dhs45 at Souq Al Jami."}, "tags": ["family", "couple", "culture"], "todo": ["Walk the reflective marble courtyards and photograph the domes", "See the main prayer hall's chandeliers and the hand-knotted carpet", "Visit the exhibition hall for Islamic art and the mosque's history", "Join a free guided cultural tour at the visitor centre", "Browse Souq Al Jami for an abaya if needed (Dhs45)"]}, {"area": "Abu Dhabi", "description": "The largest art museum in the Arabian Peninsula, opened in 2017 and designed by Jean Nouvel with a geometric dome that filters sunlight like palm fronds. Its galleries trace human creativity from prehistory to the present, bridging Eastern and Western art. The waterfront museum sits in the Saadiyat Cultural District.", "duration": "half-day", "id": "louvre", "link": "https://www.louvreabudhabi.ae", "location": "Saadiyat Island Cultural District, ~25 minutes from downtown Abu Dhabi by car, taxi, or public bus.", "name": "Louvre Abu Dhabi", "photo": null, "practical": {"bookAhead": true, "fee": "AED 70 adults; under 18 free", "note": "Closed Mondays. Galleries Tue–Thu 10am–6:30pm, Fri–Sun 10am–8:30pm."}, "tags": ["family", "couple", "culture"], "todo": ["Walk the galleries chronologically from ancient artefacts to contemporary art", "Stand under the dome to watch the light patterns shift", "Stroll the waterfront promenade around the museum", "Eat at the museum cafe with sea views", "Check the temporary exhibition wing for the current show"]}, {"area": "Abu Dhabi", "description": "The UAE's presidential palace, opened to the public in 2019 while still used for state receptions and cabinet meetings. Its Great Hall has one of the world's largest domes, and rooms like the Spirit of Collaboration showcase Emirati craftsmanship and governance. The evening Palace in Motion light show projects the UAE's story onto the facade.", "duration": "half-day", "id": "qasr-al-watan", "link": "https://www.qasralwatan.ae/", "location": "Al Ras Al Akhdar, next to Emirates Palace, ~15 minutes from the Corniche by car or taxi.", "name": "Qasr Al Watan", "photo": null, "practical": {"bookAhead": true, "fee": "AED 65 per adult", "note": "Generally open daily ~10am–6:30pm; Palace in Motion light show at 6:45pm. Some zones close during official state visits."}, "tags": ["family", "couple", "culture"], "todo": ["Tour the Great Hall and its massive mirrored cubes", "See the Spirit of Collaboration circular chamber", "View the presidential gifts and banquet hall exhibits", "Browse the House of Knowledge library collection", "Stay for the Palace in Motion evening light show"]}, {"area": "Abu Dhabi", "description": "A landmark luxury hotel (Mandarin Oriental) on the Corniche's west end, known for its gold-accented domes and grand atrium. Its afternoon tea is a classic Abu Dhabi experience, and the beachfront and gardens are open to non-guests at select venues. Le Café serves the signature camelccino.", "duration": "evening", "id": "emirates-palace", "link": "https://www.mandarinoriental.com/en/abu-dhabi/emirates-palace/explore/afternoon-tea-at-the-palace", "location": "West Corniche Road, Al Ras Al Akhdar, at the western end of the Corniche; best reached by taxi or car.", "name": "Emirates Palace", "photo": null, "practical": {"bookAhead": true, "fee": "Afternoon tea from AED 245 per person", "note": "Afternoon tea requires a reservation. Dress smart-casual; non-guests can use select restaurants and the beach club for a fee."}, "tags": ["couple", "food", "chill"], "todo": ["Book afternoon tea in the atrium", "Try the signature camelccino at Le Café", "Walk the landscaped gardens and private beach frontage", "Photograph the golden domes from the Corniche side", "Browse the hotel's boutique shops"]}, {"area": "Abu Dhabi", "description": "An 8 km waterfront promenade along Abu Dhabi's west coast with dedicated walking and cycling paths, landscaped gardens, and Blue Flag beach sections. It is the city's most popular sunset walk, lined with cafes and play areas. Entry is free; some beach sections charge a small fee.", "duration": "evening", "id": "corniche", "link": null, "location": "Along the city's northwest coast, from Emirates Palace to Mina Zayed; easy entry points at Marina Mall and the Corniche Beach gates.", "name": "Corniche stroll", "photo": "https://upload.wikimedia.org/wikipedia/commons/d/d3/The_Corniche_as_seen_from_the_Marina_Mall%2C_Abu_Dhabi%2C_UAE.JPG", "practical": {"bookAhead": false, "fee": "Free; small fee for some Blue Flag beach sections", "note": "Best in the late afternoon and evening; beach sections have lifeguards and facilities."}, "tags": ["family", "couple", "friends", "chill"], "todo": ["Walk or cycle the promenade at sunset", "Swim at a Blue Flag beach section", "Picnic on the landscaped lawns", "Rent a bike and ride the dedicated cycle path", "Stop for karak tea at a Corniche cafe"]}, {"area": "Abu Dhabi", "description": "The world's first Ferrari-branded theme park, on Yas Island under an iconic red roof. It hosts Formula Rossa, the world's fastest roller coaster (0–240 km/h), plus simulators, family rides, and Ferrari exhibits. The park is mostly indoors and air-conditioned.", "duration": "full-day", "id": "ferrari-world", "link": "https://www.ferrariworldabudhabi.com/", "location": "Yas Island, next to Yas Mall and Yas Marina Circuit, ~30–40 minutes from downtown Abu Dhabi by car or taxi.", "name": "Ferrari World", "photo": "https://upload.wikimedia.org/wikipedia/commons/a/af/Formula_Rossa_Roller_Coaster_%281%29.JPG", "practical": {"bookAhead": true, "fee": "~AED 295–345 per adult online", "note": "Open daily; hours vary (~11am–7/8pm). Height restrictions apply on major coasters; book online for lower prices."}, "tags": ["family", "friends", "adventure"], "todo": ["Ride Formula Rossa, the 240 km/h coaster", "Try the racing simulators and Flying Aces coaster", "Tour the Ferrari factory experience and classic car gallery", "Ride family attractions like Turbo Track", "Shop the Ferrari store for official merchandise"]}, {"area": "Abu Dhabi", "description": "The world's second-largest indoor theme park, on Yas Island, with 29 rides across six themed lands including Gotham City, Metropolis, and Cartoon Junction. Characters range from Batman and Superman to Bugs Bunny, Tom and Jerry, and Scooby-Doo. Fully indoor and air-conditioned, it runs year-round.", "duration": "full-day", "id": "warner-bros", "link": "https://www.wbworldabudhabi.com/", "location": "Yas Island, beside Ferrari World and Yas Waterworld, ~30–40 minutes from downtown Abu Dhabi by car or taxi.", "name": "Warner Bros. World", "photo": null, "practical": {"bookAhead": true, "fee": "AED 345 per adult", "note": "Open daily ~11am–8pm. Fully indoors, so it works in any weather; arrive at opening to beat ride queues."}, "tags": ["family", "friends", "adventure"], "todo": ["Ride the Batman: Knight Flight coaster in Gotham City", "Explore Metropolis and Cartoon Junction lands", "Meet Looney Tunes characters at the Warner Bros. Plaza", "Watch the live stunt and character shows", "Try the family rides like Tom and Jerry's Swiss Cheese Spin"]}, {"area": "Abu Dhabi", "description": "An Emirati pearl-diving-themed waterpark on Yas Island with 45 rides, slides, and attractions. Highlights include the Dawwama tornado slide and the Bandit Bomber suspended coaster. It hosts the World Flowboarding Championships and runs seasonal events.", "duration": "full-day", "id": "yas-waterworld", "link": "https://www.yaswaterworld.com/", "location": "Yas Island, beside Ferrari World and Warner Bros. World, ~30–40 minutes from downtown Abu Dhabi by car or taxi.", "name": "Yas Waterworld", "photo": null, "practical": {"bookAhead": true, "fee": "AED 295 per adult", "note": "Open daily 10am–6pm. December water is warm enough to enjoy; modest swimwear is standard."}, "tags": ["family", "friends", "adventure"], "todo": ["Ride Dawwama, the 6-person tornado waterslide", "Try the Bandit Bomber suspended water coaster", "Surf the FlowBarrel wave at Bubble's Barrel", "Float the lazy river and relax at the wave pool", "Let kids loose in the Tot's Playground zones"]}, {"area": "Abu Dhabi", "description": "A 9 km stretch of natural white-sand beach on Saadiyat Island, now operated as the Kai Beach club with loungers, dining, and water sports. The dunes behind the beach are a protected nesting habitat for hawksbill turtles. Calm, clear water makes it the emirate's best natural beach.", "duration": "half-day", "id": "saadiyat-beach", "link": null, "location": "Saadiyat Island's Gulf-facing coast, ~15 minutes from downtown Abu Dhabi by car or taxi.", "name": "Saadiyat Beach", "photo": null, "practical": {"bookAhead": false, "fee": "AED 150 weekday / AED 225 weekend (Kai Beach); under-5 free", "note": "The former public beach is now a paid beach club. Weekends are busy; arrive before noon for loungers."}, "tags": ["family", "couple", "friends", "chill"], "todo": ["Swim and sunbathe on the natural white sand", "Rent a lounger and order lunch at the beach club", "Walk the boardwalk through the protected dune reserve", "Try paddleboarding or kayaking from the beach", "Look for turtle nesting markers along the dunes (seasonal)"]}, {"area": "Abu Dhabi", "description": "A guided ~2-hour kayak trip through the Eastern Mangrove National Park's tidal channels, a protected wetland minutes from downtown. Paddlers spot herons, crabs, and occasionally flamingos among the mangrove roots. Tours include all equipment.", "duration": "morning", "id": "mangrove-kayak", "link": "https://www.husaak.ae/eastern-mangroves", "location": "Eastern Mangrove National Park, near the Anantara Eastern Mangroves hotel, ~15 minutes from the Corniche.", "name": "Eastern Mangrove kayaking", "photo": null, "practical": {"bookAhead": true, "fee": "AED 168 adult / AED 147 child (~2-hour tour)", "note": "Tours run at set times around the tides; morning slots are calmest. Bring sun protection and a change of clothes."}, "tags": ["family", "friends", "adventure", "chill"], "todo": ["Paddle the tidal channels on a guided eco kayak tour", "Spot herons, kingfishers, and crabs in the mangroves", "Try a stand-up paddleboard session if offered", "Photograph the city skyline framed by mangroves", "Combine with breakfast at the Eastern Mangroves promenade"]}, {"area": "Abu Dhabi", "description": "The world's largest falcon hospital, treating over 11,000 birds a year, offers guided tours of its wards, museum, and free-flight aviary. Visitors learn about falconry's central role in Emirati heritage and can hold a falcon for photos. Tours run at fixed times and must be booked in advance.", "duration": "morning", "id": "falcon-hospital", "link": "https://www.falconhospital.com/services/adfh-tourism/abu-dhabi-falcon-hospital-tour", "location": "Sweihan Rd, Al Shamkha district, near Abu Dhabi airport; reachable by car or taxi only.", "name": "Abu Dhabi Falcon Hospital tour", "photo": null, "practical": {"bookAhead": true, "fee": "AED 178.50 per person", "note": "Tours Mon–Thu at 10am and 2pm, Fri and Sun at 10am; closed Saturdays. Advance booking is mandatory."}, "tags": ["family", "culture"], "todo": ["Tour the treatment wards and see check-ups in progress", "Visit the falcon museum for the history of Emirati falconry", "Hold a falcon on your gloved arm for photos", "Watch falcons in the free-flight aviary", "Lunch at the hospital's cafe after the tour"]}, {"area": "Abu Dhabi", "description": "A reconstructed traditional oasis village on the Corniche Breakwater with barasti huts, a souk, and artisan workshops. It recreates pre-oil Emirati life with pottery, weaving, and metalwork demonstrations, plus a small museum of local artefacts. Entry is free and it pairs well with the Corniche walk.", "duration": "morning", "id": "heritage-village-ad", "link": null, "location": "Corniche Breakwater, near Marina Mall; walkable from the Corniche promenade.", "name": "Heritage Village Abu Dhabi", "photo": null, "practical": {"bookAhead": false, "fee": "Free", "note": "Open Sat–Thu 9am–4pm, Fri 3:30–9pm. Best combined with a morning Corniche stroll."}, "tags": ["family", "culture"], "todo": ["Walk through the reconstructed barasti huts and tents", "Watch artisans at the pottery and weaving workshops", "Browse the small museum of traditional artefacts", "Shop the souk stalls for handicrafts and spices", "Photograph the village against the Corniche skyline"]}, {"area": "Abu Dhabi", "description": "A bustling covered market at Zayed Port selling dozens of date varieties — khalas, medjool, sukkari — alongside nuts, honey, and spices. Vendors offer generous samples and expect friendly bargaining. It is a working wholesale and retail market, open daily from early morning to midnight.", "duration": "morning", "id": "mina-dates", "link": null, "location": "Mina Zayed (Zayed Port), ~10 minutes from downtown Abu Dhabi by taxi or car.", "name": "Mina Dates Market", "photo": null, "practical": {"bookAhead": false, "fee": "Free entry; pay for what you buy", "note": "Open daily ~7am–midnight. Bargaining is expected; vendors offer samples freely."}, "tags": ["family", "culture", "food"], "todo": ["Sample khalas, medjool, and stuffed date varieties", "Bargain for bulk boxes of dates to take home", "Buy Emirati honey, nuts, and spice mixes", "Taste fresh date syrup and date molasses", "Watch the port-side bustle of delivery trucks and traders"]}, {"area": "Abu Dhabi", "description": "A 2-hour guided venue tour of the Formula 1 circuit that hosts the Abu Dhabi Grand Prix, visiting the pit lane, podium, media centre, and team garages. The tour meets at Yas Central and runs on non-race days. It is the closest most visitors get to the F1 paddock.", "duration": "morning", "id": "yas-circuit", "link": "https://www.yasmarinacircuit.com", "location": "Yas Island; tours meet at Yas Central, ~30–40 minutes from downtown Abu Dhabi by car or taxi.", "name": "Yas Marina Circuit venue tour", "photo": null, "practical": {"bookAhead": true, "fee": "AED 80–159 per person depending on tour tier", "note": "Tours run ~2 hours and do not operate on race or major event days. Check the schedule before booking."}, "tags": ["family", "friends", "adventure"], "todo": ["Stand on the F1 podium and in the pit lane", "Tour the race control room and media centre", "See the team garages and the circuit's marina section", "Photograph the Yas Viceroy hotel straddling the track", "Ask the guide about Grand Prix week logistics"]}, {"area": "Abu Dhabi", "description": "A planned sustainable city near the airport built around solar power, shaded streets, and driverless electric pods. Visitors can walk the car-free central square, see the wind tower and sustainable architecture, and download a self-guided tour. Some areas feel quiet, especially on weekends.", "duration": "half-day", "id": "masdar-city", "link": "https://masdarcity.ae/", "location": "Near Abu Dhabi airport, ~20 minutes from downtown Abu Dhabi; by car or taxi, then driverless PRT pods from the parking area.", "name": "Masdar City", "photo": null, "practical": {"bookAhead": false, "fee": "Free to visit", "note": "Free to wander; a self-guided tour PDF is available."}, "tags": ["family", "culture", "chill"], "todo": ["Ride the driverless PRT pods from the car park", "Walk the shaded, car-free central streets", "See the traditional-style wind tower and solar installations", "Follow the self-guided tour map from the visitor point", "Eat at the central square cafes"]}, {"area": "Desert", "description": "The classic Abu Dhabi desert evening: hotel pickup in a 4x4, dune bashing, then a Bedouin-style camp with camel rides, sandboarding, and sunset over the dunes. The evening ends with a BBQ dinner, live shows, and stargazing before the drive back. Shared tours run 6–7 hours.", "duration": "evening", "id": "desert-safari", "link": null, "location": "Abu Dhabi desert camps; operators pick up from city hotels, typically 2:30–3:30pm.", "name": "Evening desert safari", "photo": null, "practical": {"bookAhead": true, "fee": "~AED 189–250 per person (shared tour)", "note": "Pickups 2:30–3:30pm; 6–7 hours total. Desert nights are 10–15°C in December — bring a jacket."}, "tags": ["family", "friends", "adventure", "food"], "todo": ["Ride the dune bashing 4x4 over the red dunes", "Try sandboarding down a dune face", "Take a short camel ride at the camp", "Watch the sunset, then the Tanoura and fire shows", "Eat the BBQ buffet dinner under the stars"]}, {"area": "Desert", "description": "A ~1-hour sunrise balloon flight over the desert dunes, with hotel pickup around 4–5am and a post-flight breakfast. Flights are strictly weather-dependent and confirmed the evening before. It is the most weather-sensitive desert activity, so book early in the trip.", "duration": "morning", "id": "balloon", "link": null, "location": "Desert launch sites outside the city; operators collect from Abu Dhabi hotels around 4–5am.", "name": "Sunrise hot-air balloon", "photo": null, "practical": {"bookAhead": true, "fee": "~AED 900–1,799 per person", "note": "Hotel pickup ~4–5am; ~1-hour flight. Weather-dependent — flights are confirmed or cancelled the evening before."}, "tags": ["couple", "friends", "adventure"], "todo": ["Watch the balloon inflation at dawn", "Float over the dunes as the sun rises", "Spot desert wildlife like oryx and gazelles from the air", "Enjoy the post-flight breakfast at the landing site", "Get the flight certificate from the pilot"]}, {"area": "Desert", "description": "Self-drive dune buggies and quad bikes across the Abu Dhabi dunes, usually in 60-minute sessions with a guide leading the convoy. Quad bikes are the cheaper entry point; two- and four-seat dune buggies handle bigger dunes. Helmets and a safety briefing are included.", "duration": "half-day", "id": "dune-buggy", "link": null, "location": "Desert camps outside Abu Dhabi; operators offer hotel pickup or meet-at-camp options.", "name": "Dune buggy / quad biking", "photo": null, "practical": {"bookAhead": true, "fee": "Quad ~AED 275/60min; dune buggy from ~AED 799/60min", "note": "Helmets and briefing included. Driving licence may be required for buggies — confirm when booking."}, "tags": ["friends", "adventure"], "todo": ["Drive a guided 60-minute dune buggy convoy", "Try quad biking for the cheaper, faster option", "Stop at a high dune for photos mid-session", "Combine with sandboarding if the operator offers it", "Cool off with refreshments back at the camp"]}, {"area": "Desert", "description": "A slow, guided camel caravan ride through the dunes, usually 30–60 minutes, often bundled with desert camp experiences. Treks run at sunrise or sunset for the best light and cooler temperatures. It is the calmest way to experience the desert.", "duration": "half-day", "id": "camel-trek", "link": null, "location": "Desert camps outside Abu Dhabi; booked through safari operators with hotel pickup.", "name": "Camel trek", "photo": null, "practical": {"bookAhead": true, "fee": "From AED 450 per person (operator packages)", "note": "Sunset slots fill first. Wear long trousers; the saddle can be rough on bare legs."}, "tags": ["family", "couple", "culture", "chill"], "todo": ["Ride a camel caravan across the dunes", "Time the trek for sunrise or sunset light", "Learn about Bedouin camel culture from the guide", "Photograph the caravan silhouetted on a dune ridge", "Pair it with breakfast or dinner at the camp"]}, {"area": "Desert", "description": "A hands-on falconry session with trained birds — handling, flying, and learning hunting techniques from a falconer. Desert falconry experiences run through operator sessions and hotel shows seasonally. Sessions are small-group and outdoors.", "duration": "morning", "id": "falconry-exp", "link": null, "location": "Desert venues outside Abu Dhabi; booked through safari operators.", "name": "Falconry experience", "photo": null, "practical": {"bookAhead": true, "fee": "Operator prices vary", "note": "Outdoor and seasonal — winter shows run October to April only. Confirm meeting point when booking."}, "tags": ["family", "culture", "adventure"], "todo": ["Fly a falcon to your gloved fist", "Learn how falconers train and hunt with the birds", "Watch lure-swinging and high-speed stoops", "Photograph the birds perched against the dunes"]}, {"area": "Desert", "description": "The evening safari extended into a night under the stars: dinner and shows, then sleeping in a Bedouin-style tent or open-air setup with bedding provided. Wake to a desert sunrise and breakfast before the ~8:30–9:30am return transfer. December nights are cool, so warm layers are essential.", "duration": "full-day", "id": "overnight-camp", "link": null, "location": "Abu Dhabi desert camps; hotel pickup 2:30–3:30pm, return ~8:30–9:30am next day.", "name": "Overnight desert camp", "photo": null, "practical": {"bookAhead": true, "fee": "AED 400–550 per person (shared)", "note": "Pickup 2:30–3:30pm; next-morning drop-off ~8:30–9:30am. Bedding provided; bring a warm jacket — Nov–Mar nights are cool."}, "tags": ["couple", "friends", "adventure", "chill"], "todo": ["Enjoy the evening safari activities and BBQ dinner", "Stargaze far from city lights after the shows end", "Sleep in a Bedouin tent with provided bedding", "Wake for sunrise over the dunes", "Eat breakfast at camp before the morning transfer"]}, {"area": "Al Ain", "description": "A drive up the UAE's second-highest peak (1,249 m) on an 11.7 km mountain road with 21 hairpin turns, ending at a summit parking area with panoramic views. Sunset is the classic time, with the plains and Al Ain city spread below. It is cooler at the top, so bring a jacket.", "duration": "evening", "id": "jebel-hafeet", "link": "https://myalain.ae/attractions/jebel-hafeet/", "location": "South of Al Ain on the Oman border, ~1.5 hours from Abu Dhabi city; the mountain road starts at Green Mubazzarah.", "name": "Jebel Hafeet sunset drive", "photo": null, "practical": {"bookAhead": false, "fee": "Free", "note": "Cooler at the summit than in the city — bring a jacket. Drive carefully; the road is popular with fast drivers."}, "tags": ["couple", "friends", "adventure", "chill"], "todo": ["Drive the 21-turn mountain road to the summit", "Watch sunset from the top parking area", "Stop at the midway viewpoints on the way up", "Soak feet in the Green Mubazzarah hot springs at the base", "Photograph the road's switchbacks from above"]}, {"area": "Al Ain", "description": "A 1,200-hectare UNESCO World Heritage oasis with around 147,000 date palms, watered by an ancient falaj irrigation system still in use. Shaded walking paths wind between palm plantations and old mud-brick walls. It is free to enter and best explored on foot or by bike in the morning.", "duration": "morning", "id": "al-ain-oasis", "link": "https://visitalain.ae/en/experiences/nature/al-ain-oasis", "location": "Central Al Ain, off Al Tuhaf St; entrances along the oasis edge, ~1.5 hours from Abu Dhabi city.", "name": "Al Ain Oasis", "photo": "https://upload.wikimedia.org/wikipedia/commons/b/bf/Al_Ain_Oasis.jpg", "practical": {"bookAhead": false, "fee": "Free", "note": "Hours vary by source (9am–5pm vs 9am–7pm) — confirm on arrival. Morning visits are coolest."}, "tags": ["family", "couple", "culture", "chill"], "todo": ["Walk the shaded paths between the date palm plantations", "See the ancient falaj irrigation channels in action", "Rent a bike at the oasis entrance for a longer loop", "Visit the small eco-centre exhibits on oasis life", "Photograph the mud-brick walls and palm canopy"]}, {"area": "Al Ain", "description": "One of the last traditional camel souqs in the UAE, where traders from across the region buy and sell camels, goats, and sheep. Peak trading is 6–9am, with haggling, handshakes, and phone calls sealing deals. Visitors are welcome; dress modestly and ask before photographing people or animals.", "duration": "morning", "id": "camel-market", "link": null, "location": "Zayed Bin Sultan Rd, behind Bawadi Mall, Al Ain; a short taxi ride from central Al Ain.", "name": "Al Ain Camel Market", "photo": null, "practical": {"bookAhead": false, "fee": "Free", "note": "Open daily 6am–7pm; go early for the real trading. Dress modestly; ask permission before photos."}, "tags": ["family", "culture"], "todo": ["Arrive 6–9am for peak trading activity", "Watch traders negotiate and inspect camels", "Browse the goats, sheep, and livestock pens", "Chat with traders about racing vs breeding camels", "Buy feed or small souvenirs from the market shops"]}, {"area": "Al Ain", "description": "A 19th-century fort built 1891–1898 by Sheikh Zayed bin Khalifa Al Nahyan, with a distinctive round watchtower and crenellated walls. It now hosts exhibitions including the Wilfred Thesiger collection on his Empty Quarter crossings. Set in landscaped gardens, it is free to enter.", "duration": "morning", "id": "al-jahili-fort", "link": null, "location": "20 Mohammed Bin Khalifa St, central Al Ain; walkable from the Al Ain Oasis area.", "name": "Al Jahili Fort", "photo": null, "practical": {"bookAhead": false, "fee": "Free", "note": "Hours vary by source (9am–7pm daily vs older Fri 3–5pm / Mon closed) — confirm hours on arrival."}, "tags": ["family", "culture"], "todo": ["Tour the restored fort rooms and courtyard", "See the Wilfred Thesiger photography exhibition", "Climb the round watchtower for views over the gardens", "Walk the surrounding landscaped park", "Combine with the nearby Al Ain Oasis in one morning"]}]);
+CATALOG.push([{"area": "Sharjah", "description": "The Heart of Sharjah is the largest heritage-restoration project in the Gulf, reviving the old town's souqs, merchant houses and lanes in traditional style. It hosts the Sharjah Heritage Museum, Bait Al Naboodah, the Sharjah Fort (Al Hisn) and the Calligraphy Museum. Strolling the restored streets and souqs is free; individual museums charge small entry fees.", "duration": "half-day", "id": "heart-sharjah", "link": "https://www.heartofsharjah.ae/", "location": "Corniche Street, Al Mareija, Sharjah — the old town by Khalid Lagoon, roughly 30–40 minutes by car from Dubai.", "name": "Heart of Sharjah", "photo": "https://upload.wikimedia.org/wikipedia/commons/9/98/Heart_of_sharjah_.jpg", "practical": {"bookAhead": false, "fee": "Free to walk around; museums ~AED 5–10 per person", "note": "Museums generally Sat–Thu 8am–8pm, Fri 4–8pm; shops follow their own hours"}, "tags": ["family", "couple", "culture", "food"], "todo": ["Wander Souq Al Arsah and the restored heritage lanes", "Visit the Sharjah Fort (Al Hisn) and Bait Al Naboodah", "Explore the Sharjah Calligraphy Museum", "Have an Emirati breakfast at the Arabian Tea House", "Shop for handicrafts and souvenirs in the old souq stalls"]}, {"area": "Sharjah", "description": "The largest art museum in the Gulf, set in the Heart of Sharjah's Arts Area, with a permanent collection of modern and contemporary Arab art plus Orientalist works of the 18th–20th centuries. It hosts the Sharjah Biennial and rotating exhibitions, alongside an art library. Admission is free, including free guided tours in Arabic and English.", "duration": "half-day", "id": "sharjah-art-museum", "link": null, "location": "Arts Area, Al Shuwaihean, Sharjah — opposite the Emirates Fine Arts Society, within the Heart of Sharjah district; about 30 minutes from Dubai.", "name": "Sharjah Art Museum", "photo": "https://upload.wikimedia.org/wikipedia/commons/2/21/Sharjah_Art_Museum.jpg", "practical": {"bookAhead": false, "fee": "Free", "note": "Sat–Thu 8am–8pm, Fri 4–8pm; closed on public holidays such as Eid days"}, "tags": ["culture", "couple", "family"], "todo": ["Tour the modern and contemporary Arab art collection", "See the Orientalist gallery of Egypt, Syria and Turkey scenes", "Check the current temporary or Biennial exhibition", "Join a free guided tour in English or Arabic", "Browse the art library and gift shop"]}, {"area": "Sharjah", "description": "Known as the Blue Souq for its patterned blue tile exterior (depicted on the UAE Dhs5 note), this 1978 landmark is Sharjah's most famous market. Two connected halls hold over 600 shops selling gold jewellery, carpets, perfumes, textiles, electronics and souvenirs. Bargaining with vendors is normal, especially on the upper-floor carpet and curio shops.", "duration": "half-day", "id": "central-souq", "link": null, "location": "King Faisal Street, Al Buhairah Corniche, Sharjah, next to Khaled Lagoon and the 'Smile You Are in Sharjah' roundabout.", "name": "Central Souq (Blue Souq)", "photo": "https://upload.wikimedia.org/wikipedia/commons/e/e3/Sharjah_Central_Souq.jpg", "practical": {"bookAhead": false, "fee": "Free entry", "note": "Typically Sat–Thu 10am–10pm, Fri 5–10:30pm; midday lull for some shops"}, "tags": ["family", "food", "culture"], "todo": ["Browse the gold souq wing and compare making charges", "Haggle for carpets, oud and attar perfumes on the upper floor", "Pick up souvenirs, abayas and textiles", "Sample Arabic sweets and snacks from food stalls", "Photograph the blue-tiled facade in the evening"]}, {"area": "Sharjah", "description": "A landscaped island park on Khalid Lagoon combining botanical gardens, art installations (including the OVO structure), a literature pavilion and a children's play area. Its climate-controlled Butterfly House hosts hundreds of exotic butterflies from around the world. Reached by pedestrian bridge from behind Al Noor Mosque.", "duration": "half-day", "id": "al-noor-island", "link": null, "location": "Khalid Lagoon, Buhairah Corniche, Sharjah — pedestrian bridge behind Al Noor Mosque.", "name": "Al Noor Island & Butterfly House", "photo": "https://upload.wikimedia.org/wikipedia/commons/3/39/SHARJAH_NOOR_ISLAND_2.jpg", "practical": {"bookAhead": false, "fee": "From AED 50 adult / AED 30 child (3–12) with guided butterfly session", "note": "Butterfly House open 9am–6pm; island open daily 9am–11pm (later on weekends)"}, "tags": ["family", "couple", "chill", "rest"], "todo": ["Walk through the Butterfly House and learn the butterfly lifecycle", "Follow the art trail to the OVO and other installations", "Relax at the Literature Pavilion and the island café", "Visit in the evening for the lit-up gardens", "Let kids explore the nature play areas"]}, {"area": "Sharjah", "description": "A permanent installation by art collective Random International, hosted by the Sharjah Art Foundation — the only permanent Rain Room in the region. Motion sensors pause the falling water wherever you walk, so you move through a downpour without getting wet. Each timed session lasts 15 minutes with a small group, making it a short but striking stop.", "duration": "morning", "id": "rain-room", "link": null, "location": "Sharjah Art Foundation, Al Majarrah, Al Sharq, Sharjah — opposite Lulu Hypermarket, near the Sharjah Art Museum.", "name": "Rain Room Sharjah", "photo": "https://upload.wikimedia.org/wikipedia/commons/a/a3/The_Rain_Room._Sharjah%2C_UAE._12_December%2C_2023.jpg", "practical": {"bookAhead": true, "fee": "AED 25 adult / AED 15 student-teacher / free under 5", "note": "Sat–Thu 9am–9pm, Fri 4–10pm; booking ahead recommended on weekends; avoid dark/shiny clothing (affects sensors)"}, "tags": ["couple", "friends", "culture"], "todo": ["Book a 15-minute session and walk the rain field slowly for the full effect", "Take silhouette photos in the dim light", "Combine with the Sharjah Art Museum and Islamic Civilisation Museum nearby", "Read the installation's notes on technology and nature", "Visit on a weekday morning to avoid queues"]}, {"area": "Sharjah", "description": "Sharjah's flagship lagoon-side promenade on Khalid Lagoon, lined with restaurants, cafés, a jogging track, kids' splash park and the Maraya Art Centre. Its centrepiece is the Sharjah Musical Fountain — the Gulf's largest, with jets up to 100m and 220m-wide shows. Free to enter and ideal for a relaxed evening stroll and dinner.", "duration": "evening", "id": "al-majaz", "link": null, "location": "Al Buhairah Corniche Road, Al Majaz 2, Sharjah, on Khalid Lagoon opposite Al Noor Island.", "name": "Al Majaz Waterfront", "photo": "https://upload.wikimedia.org/wikipedia/commons/8/8d/Al_Majaz_Waterfront%2C_Sharjah_UAE.jpg", "practical": {"bookAhead": false, "fee": "Free entry; fountain shows free; boat rides and dining extra", "note": "Fountain shows typically 6:30pm–11:30pm (later on Thu–Fri); best visited in the evening"}, "tags": ["family", "couple", "food", "chill"], "todo": ["Watch the musical fountain show from the piazza or a café terrace", "Take an abra boat ride on the lagoon", "Dinner at waterfront restaurants", "Walk or jog the lagoon promenade and visit the splash park", "Check the Maraya Art Centre's current exhibition"]}, {"area": "Sharjah", "description": "A compact, family-friendly aquarium on Al Khan corniche with 20+ tanks recreating local marine habitats — Arabian Gulf reefs, lagoons and mangroves. It houses over 150 species including reef sharks, clownfish, seahorses and moray eels, plus a walk-through tunnel and touch pool. The same ticket covers the adjacent Sharjah Maritime Museum.", "duration": "half-day", "id": "sharjah-aquarium", "link": "https://www.sharjahmuseums.ae/en-US/Museums/Sharjah-Aquarium", "location": "Al Meena Street, Al Khan Old area, Sharjah — adjacent to the Sharjah Maritime Museum.", "name": "Sharjah Aquarium", "photo": "https://upload.wikimedia.org/wikipedia/commons/9/99/Sharjah_Aquarium_-_panoramio.jpg", "practical": {"bookAhead": false, "fee": "AED 25 adult / AED 15 child (2–12); ticket also covers the Maritime Museum", "note": "Sat–Thu 8am–8pm, Fri 4–8pm; cash commonly expected at the counter"}, "tags": ["family", "couple", "chill"], "todo": ["Walk the underwater tunnel in the main tank", "Watch shark feeding times", "Try the interactive touch pool", "Visit the adjoining Maritime Museum on the same ticket", "Stroll the Al Khan corniche afterwards"]}, {"area": "Sharjah", "description": "A modern visitor centre and museum near Jebel Fayah, ~65km southeast of Sharjah city, covering the region's history from the Stone Age to the pre-Islamic period. Built around a 4,500-year-old Umm Al Nar-era tomb, it anchors guided tours of fossil sites, Camel Rock and Fossil Rock, plus desert adventures like dune buggy drives, horse riding and stargazing.", "duration": "half-day", "id": "mleiha", "link": null, "location": "Sharjah–Kalba Road (E102), Mleiha, ~65km southeast of Sharjah city and ~75km from Dubai; drive or book a tour with hotel pickup.", "name": "Mleiha Archaeological Centre", "photo": "https://upload.wikimedia.org/wikipedia/commons/f/fa/Mleiha_Archaeological_Centre_-_55267394761.jpg", "practical": {"bookAhead": true, "fee": "AED 25 adult / AED 15 child (3–12)", "note": "Centre hours vary by source (approx 9am–7pm, later on Thu–Fri); guided adventure tours should be booked ahead"}, "tags": ["adventure", "culture", "family", "friends"], "todo": ["Tour the museum exhibition and the Umm an-Nar tomb", "Join a guided archaeological tour of the excavation sites", "Hike to Camel Rock and Fossil Rock viewpoints", "Book a sunset desert safari, dune buggy or horse ride", "Have karak and snacks at the Mleiha Café"]}, {"area": "Sharjah", "description": "A conservation-focused park on Al Dhaid Road whose single ticket covers Arabia's Wildlife Centre, the Natural History Museum, the Islamic Botanical Garden and the Children's Farm. The Wildlife Centre's air-conditioned indoor galleries showcase Arabian leopards, oryx, gazelles, cheetahs, reptiles and nocturnal animals. One of the UAE's best-value family outings.", "duration": "half-day", "id": "sharjah-desert-park", "link": "https://epaashj.ae/", "location": "Al Dhaid Road (E88), Sharjah — ~40–50 minutes from Dubai by car/taxi; public transport is limited.", "name": "Sharjah Desert Park", "photo": null, "practical": {"bookAhead": false, "fee": "AED 15 adult / AED 5 (ages 12–16) / free under 12", "note": "Closed Tuesdays; Sun–Mon & Wed–Thu 9am–5:30pm, Fri 2–5:30pm, Sat 11am–5:30pm; photography prohibited; bring cash"}, "tags": ["family", "chill", "culture"], "todo": ["Walk the air-conditioned Wildlife Centre galleries", "Visit the Natural History Museum and fossil displays", "Explore the Islamic Botanical Garden's medicinal plants", "Let kids meet farm animals at the Children's Farm", "Have snacks at the park cafeteria"]}, {"area": "Sharjah", "description": "A striking set of five steel-clad pods on the slopes of Jebel Buhais, ~50km southeast of Sharjah, presenting 65+ million years of regional geology through interactive exhibits, a theatre and a short film. An outdoor trail leads past fossil beds, limestone ridges and ancient burial sites from the Stone, Bronze and Iron Ages.", "duration": "half-day", "id": "buhais-geology", "link": "https://epaashj.ae/", "location": "Jebel Buhais, Al Madam, Sharjah — near Filli roundabout, ~1 hour from Dubai; reachable only by car.", "name": "Buhais Geology Park", "photo": "https://upload.wikimedia.org/wikipedia/commons/8/83/Buhais_Geological_Park.jpg", "practical": {"bookAhead": false, "fee": "AED 10.5 adult / free under 12", "note": "Closed Tuesdays; typically 9am–7pm (Fri 2–7pm, Sat 11am–7pm); ticket office closes before the park"}, "tags": ["culture", "family", "rest"], "todo": ["Watch the introductory film in the visitor pods", "Walk the outdoor geology trail past fossil and rock displays", "Spot the fossilised sea urchins the pods are modelled on", "Combine with Mleiha Archaeological Centre (30–40 min away)", "Visit the small café and gift shop"]}, {"area": "Hatta", "description": "Kayaking on the turquoise Hatta reservoir, framed by the Hajar Mountains — one of the UAE's most photographed water scenes. Operator Hatta Kayak rents single and double kayaks, pedal boats and donut boats; the single kayak is famously AED 60 with unlimited time on the water. Life jackets are mandatory and lifeguards patrol the water.", "duration": "morning", "id": "hatta-kayak", "link": null, "location": "Hatta Dam, ~5 minutes from Hatta Heritage Village; ~90 minutes from Dubai via E44. A steep hill separates the car park from the water's edge.", "name": "Hatta Dam kayaking", "photo": "https://upload.wikimedia.org/wikipedia/commons/0/02/Hatta_Dam_Kayaking.jpg", "practical": {"bookAhead": false, "fee": "Kayaks from AED 60 (single) to ~AED 100 (double)", "note": "Daylight hours only; own equipment not allowed — must rent from Hatta Kayak; wear quick-dry clothing and bring sunscreen"}, "tags": ["adventure", "couple", "friends"], "todo": ["Rent a single (AED 60) or double kayak for an unlimited-time paddle", "Paddle to the dam wall for the classic mountain-reflection photo", "Try a pedal boat for a relaxed family ride", "Spot the mural of Sheikh Zayed and Sheikh Rashid overlooking the water", "Go early morning on a weekday to beat the crowds"]}, {"area": "Hatta", "description": "The UAE's flagship mountain adventure centre in the Hajar foothills, open all year with free entry to the grounds. It packs 25+ individually priced activities: twin zipline, axe throwing, archery, wall climbing, zorbing, the Hatta Drop-In water slide, gel ball battles and trampolines. It is also the trailhead for Hatta's hiking and mountain-biking networks, with cafés and food trucks on site.", "duration": "full-day", "id": "wadi-hub", "link": null, "location": "Hatta, Dubai exclave — ~130km / 90 minutes from Dubai via E102/E44.", "name": "Hatta Wadi Hub", "photo": null, "practical": {"bookAhead": false, "fee": "Free entry; activities individually priced from ~AED 15 to ~AED 110 (zipline)", "note": "Winter hours daily 7am–10pm; activity counters close earlier; closed-toe shoes required for most activities"}, "tags": ["adventure", "family", "friends"], "todo": ["Ride the twin zipline and try the Hatta Drop-In water slide", "Book axe throwing, archery and wall climbing sessions", "Start a wadi or mountain hike from the hub trailhead", "Have lunch at the on-site cafés and food trucks", "Check the winter-season programme during the Hatta Festival (Dec 4–Jan 10)"]}, {"area": "Hatta", "description": "A restored mountain settlement of 30+ structures — mud-brick houses, two watchtowers, a fort and the 1780 Juma Mosque — believed to be over 3,000 years old. Exhibits cover traditional weapons, pottery, crafts and the ancient falaj irrigation system, with the Al Sharia palm farm nearby. Entry is free and most visitors spend one to two hours.", "duration": "half-day", "id": "hatta-heritage", "link": null, "location": "Hatta, near the Oman border, ~134km from Dubai; accessible via E102 or E611; private car or tour recommended.", "name": "Hatta Heritage Village", "photo": "https://upload.wikimedia.org/wikipedia/commons/4/4c/Hatta_Heritage_Village.jpg", "practical": {"bookAhead": false, "fee": "Free", "note": "Sat–Thu 8am–8:30pm, Fri 2:30–8:30pm; dress modestly; limited dining — bring water/snacks"}, "tags": ["culture", "family", "couple"], "todo": ["Climb the watchtowers for views over the village and mountains", "Tour the fort, majlis and traditional house interiors", "See the falaj irrigation channel and Al Sharia palm farm", "Browse the small museum of weapons, pottery and tools", "Stop at Swan Lake, a short drive away, for photos"]}, {"area": "Hatta", "description": "The Hatta Festival runs December 4, 2026 to January 10, 2027 as part of Dubai's winter season, with lighting displays, live music, food pop-ups and cafés around the mountains. Each weekend, fireworks light up the iconic hillside Hatta Sign. The festival is free to attend; it is open 4–10pm on weekdays and 12pm–midnight on weekends.", "duration": "evening", "id": "hatta-fireworks", "link": "https://winterindubai.com/event/hatta-festival/", "location": "Hatta — fireworks at the iconic Hatta Sign overlooking the town; festival grounds around Leem Lake and Hatta Wadi Hub.", "name": "Hatta Festival fireworks evening", "photo": "https://upload.wikimedia.org/wikipedia/commons/a/af/Hatta_Sign.jpg", "practical": {"bookAhead": false, "fee": "Free entry", "note": "Runs Dec 4, 2026–Jan 10, 2027; fireworks typically Fri–Sat evenings; confirm exact times before going"}, "tags": ["family", "friends", "chill", "couple"], "todo": ["Watch the weekend fireworks at the Hatta Sign", "See the illuminated mountain landscapes and light displays", "Enjoy live music and DJ sets at the festival grounds", "Try the artisan cafés and food pop-ups", "Combine with a daytime kayak or Wadi Hub visit"]}, {"area": "Hatta", "description": "The Hatta Mountain Bike Trail Centre is the UAE's flagship trail network, with 30–35km of graded singletrack (green to black) in the Hajar Mountains. Trails are free to ride year-round, with rental bikes at the Hatta Wadi Hub trailhead — helmets included. The prime season is October–April.", "duration": "half-day", "id": "hatta-mtb", "link": "https://www.visitdubai.com/uk/places-to-visit/hatta-mountain-bike-trail-centre", "location": "Trailhead at Hatta Wadi Hub, Sufayri, Hatta — ~90 minutes from Dubai; rentals, showers, bike wash and café on site.", "name": "Hatta mountain biking", "photo": "https://upload.wikimedia.org/wikipedia/commons/c/cf/Hatta_mountain.jpg", "practical": {"bookAhead": false, "fee": "Trails free; rentals ~AED 65/hour standard, ~AED 150/3h e-bike", "note": "Trails open daily ~6am–6pm; wear protective gear, carry repair kit and water; check signage after rain (flash-flood risk in wadis)"}, "tags": ["adventure", "friends"], "todo": ["Rent a bike at the trailhead and pick up a trail map", "Warm up on the green beginner loops", "Progress to blue or red trails with climbs and rock gardens", "Go early morning in December for cool, dry conditions", "Finish with showers and coffee at the hub"]}, {"area": "Hatta", "description": "Run by Hatta Honey, the UAE's largest honey producer, this discovery centre is the Middle East's first specialised bee garden, with 300+ hives on a 16,000 sqm mountain garden. Visitors don beekeeping suits, meet live colonies, spot the queen bee and join honey tastings. A small, memorable stop — most visits take 30–60 minutes.", "duration": "morning", "id": "hatta-honey", "link": null, "location": "Al Fay Road, Hatta — about 10 minutes from Hatta Dam; the final approach road is unpaved and rocky.", "name": "Hatta Honey Bee Discovery Centre", "photo": "https://upload.wikimedia.org/wikipedia/commons/b/b8/Salem_bin_Sultan_Al_Qasimi_with_Dr_Muhammad_Khan_at_Hatta_Honey_Bee_Garden.jpg", "practical": {"bookAhead": false, "fee": "AED 50 per person", "note": "Daily 9am–5pm (last entry ~4pm); capacity ~50 at a time; minimum age 3; wear long trousers"}, "tags": ["family", "food", "culture"], "todo": ["Suit up and open a live hive with a guide", "Spot the queen bee and watch bees emerging from cells", "Join a guided honey tasting of local varieties", "Buy Hatta Honey from the garden shop", "Explore the native trees the bees forage on"]}, {"area": "Fujairah", "description": "A rocky islet off Al Aqah Beach in Fujairah, named for its silhouette resembling Snoopy lying on his back. It is the east coast's most popular shore-access snorkeling spot, with hard corals, parrotfish, turtles, rays and small reef sharks in 3–7m of water. The island is swimmable from shore (~100–200m); a flotation device is wise for weaker swimmers.", "duration": "half-day", "id": "snoopy-island", "link": null, "location": "Al Aqah Beach, Fujairah — ~1h40 from Dubai via E611/E102; access via the public beach (free) or a Sandy Beach Resort day pass.", "name": "Snoopy Island snorkeling", "photo": "https://upload.wikimedia.org/wikipedia/commons/6/60/Snoopy_Island_Long_Exposure.jpg", "practical": {"bookAhead": false, "fee": "Free via public beach", "note": "Best Oct–April (calm, clear seas); bring your own snorkel gear; check daily sea/wind conditions"}, "tags": ["adventure", "family", "friends", "chill"], "todo": ["Snorkel the coral gardens around the island's rocky base", "Look for turtles, trumpetfish and barracuda schools", "Rent a kayak or paddleboard from the beach kiosks", "Go early morning for the clearest water and fewest crowds", "Bring reef-safe sunscreen and protective footwear for sharp corals"]}, {"area": "Fujairah", "description": "Fujairah's most important heritage landmark, a 16th-century fort on a hill above the old city, built of mud, stone and mortar with square and round towers. It served as both defensive stronghold and royal residence. Entry is free; allow 1–2 hours and wear sturdy shoes for the steep steps.", "duration": "half-day", "id": "fujairah-fort", "link": "http://www.fujairahtourism.ae/index.php?action=Museum+And+Forts", "location": "Old Fujairah, ~2km from central Fujairah city and 3km from the coast; ~90 minutes from Dubai via E88/E89.", "name": "Fujairah Fort", "photo": "https://upload.wikimedia.org/wikipedia/commons/8/8e/Fujairah_Fort_Side_View%2C_Fujairah%2C_UAE.jpg", "practical": {"bookAhead": false, "fee": "Free", "note": "Daily ~8am–6pm (hours vary by source); steep steps and no shade — bring water and sunscreen"}, "tags": ["culture", "family", "couple"], "todo": ["Climb to the towers for panoramic views over Fujairah", "Explore the courtyards and restored mud-brick halls", "Visit the Fujairah Museum and Heritage Village next door", "Combine with Al Bidya Mosque on the coastal road north"]}, {"area": "Fujairah", "description": "The oldest mosque in the UAE still in regular use, built of mud and stone around 1446 CE in the village of Al Bidya. Its compact ~7m-square prayer hall is topped by four domes of unequal size on a single central pillar, with no minaret. It remains a functioning mosque; modestly dressed visitors may enter outside prayer times.", "duration": "morning", "id": "bidya-mosque", "link": null, "location": "Al Bidya village, ~40km north of Fujairah city on Rugaylat Road (E99) between Khorfakkan and Dibba.", "name": "Al Bidya Mosque", "photo": "https://upload.wikimedia.org/wikipedia/commons/f/ff/Al_Bidya_Mosque.jpg", "practical": {"bookAhead": false, "fee": "Free", "note": "Functioning mosque — dress modestly, avoid visiting during prayer times"}, "tags": ["culture", "couple", "rest"], "todo": ["Enter the prayer hall and see the four unequal domes from inside", "Visit the two hilltop watchtowers above the mosque", "Walk the surrounding archaeological area and craft stalls", "Stop between Khorfakkan and Dibba on an east-coast drive", "Enjoy the coastal and mountain views from the site"]}, {"area": "Ras Al Khaimah", "description": "Jebel Jais is the UAE's tallest mountain (1,934m), home to the Guinness-record Jebel Jais Flight — the world's longest zipline at 2,832m, launched belly-down in a 'superman' position at up to 160km/h. Operator ToroVerde also runs the gentler Jais Sky Tour (6 ziplines over 5km) and the UAE's highest sky bridge. Advance booking is strongly recommended.", "duration": "half-day", "id": "jebel-jais", "link": null, "location": "Jebel Jais, Ras Al Khaimah — ~2 hours from Dubai; check in at the Jais Adventure Center, Wadi Shehah.", "name": "Jebel Jais & zipline", "photo": "https://upload.wikimedia.org/wikipedia/commons/d/da/Jebel_Jais_01.jpg", "practical": {"bookAhead": true, "fee": "Jais Flight from ~AED 300–399", "note": "Operates Wed–Sun; weight 40–120kg and min height 122cm apply; book ahead — December slots fill fast"}, "tags": ["adventure", "couple", "friends"], "todo": ["Fly the Jais Flight (2.83km, up to 160km/h) in superhero position", "Try the Jais Sky Tour's 6 seated ziplines and the 1,250m-high sky bridge", "Drive the mountain road to the Viewing Deck Park at the summit", "Bring passport/Emirates ID for check-in and wear closed-toe shoes", "Stop for mountain-view cafés on the descent"]}, {"area": "Ras Al Khaimah", "description": "The UAE's only working pearl farm, in the Al Rams lagoon, reviving the country's pearling heritage with 40,000 implanted oysters a year. The 2.5-hour House of Pearls tour takes you by dhow through the mangroves to the floating farm for a guided history of pearl diving, pearl cultivation science and a live oyster-opening demonstration. Tours run at set times and must be booked online.", "duration": "half-day", "id": "pearl-farm", "link": null, "location": "Al Rams Corniche, northern Ras Al Khaimah — tours depart from the Al Rams Marina pier.", "name": "Suwaidi Pearl Farm", "photo": "https://upload.wikimedia.org/wikipedia/commons/e/ea/Suwaidi_pearls_08.jpg", "practical": {"bookAhead": true, "fee": "AED 250 adult / AED 125 child (9–12)", "note": "Fixed daily tour times; book online in advance; modest dress required; wear sunscreen and insect repellent"}, "tags": ["culture", "couple", "family"], "todo": ["Sail the mangrove dhow ride to the floating farm", "Watch a live oyster opening and pearl extraction", "Learn the history of UAE pearl diving and cultured-pearl science", "Visit the pearl museum and browse the collection"]}, {"area": "Ras Al Khaimah", "description": "The UAE's only surviving hilltop fort, built in the 16th century on a rocky hill amid date-palm gardens, famous as the site of the 1819 battle between local tribes and British forces. A steep zigzag staircase leads to the summit for panoramic views over the Hajar Mountains, palm oasis and coastline. Free entry and no facilities — a short, rewarding stop.", "duration": "morning", "id": "dhayah-fort", "link": null, "location": "Dhayah, ~18–20km north of Ras Al Khaimah city; short drive from Jebel Jais.", "name": "Dhayah Fort", "photo": "https://upload.wikimedia.org/wikipedia/commons/0/0a/Dhayah_Fort_showing_hilltop_location.jpg", "practical": {"bookAhead": false, "fee": "Free", "note": "Daylight hours only; no shade or facilities — bring water; comfortable shoes essential for the steep climb"}, "tags": ["culture", "adventure", "couple"], "todo": ["Climb the stone steps to the hilltop fort", "Take panoramic photos of the palm groves, mountains and coast", "Read the on-site history boards about the 1819 battle", "Combine with Jebel Jais or the Suwaidi Pearl Farm nearby", "Visit at sunrise or sunset for the best light"]}, {"area": "Umm Al Quwain", "description": "One of the UAE's largest water parks, in Umm Al Quwain with 30+ rides and slides — Kamikaze, Twister, family raft rides, wave pools and lazy rivers — set among landscaped gardens. It also has a mini zoo, jacuzzi, kids' splash zones and restaurants. Entry is priced by height rather than age, and prices fluctuate with seasonal deals.", "duration": "full-day", "id": "dreamland", "link": null, "location": "Umm Al Quwain, on the coast between Ajman and Ras Al Khaimah — ~70km / 45–60 minutes from Dubai.", "name": "Dreamland Aquapark", "photo": null, "practical": {"bookAhead": false, "fee": "Adult (above 120cm) ~AED 93; child (80–120cm) ~AED 73", "note": "Pricing changes frequently — check current offers before going; no outside food/drink"}, "tags": ["family", "friends", "chill"], "todo": ["Ride the Kamikaze and Twister thrill slides", "Float the lazy river and brave the wave pool", "Let kids loose in the splash pads and family raft ride", "Visit the on-site mini zoo between swims"]}, {"area": "Al Dhafra", "description": "A 23-day winter festival (December 11, 2026 – January 2, 2027) at Tal Moreeb — the UAE's tallest dune at ~300m — in the Al Dhafra region. It mixes motorsport (Moreeb Dune Climb, freestyle drift, Monster Jam, bike drag racing) with Emirati heritage: falconry championships, camel and horse races, Liwa Village carnival rides, crafts, food outlets, plus evening fireworks and drone shows. General entry is free; some events ticketed.", "duration": "full-day", "id": "liwa-festival", "link": null, "location": "Tal Moreeb, Liwa, Al Dhafra Region, Abu Dhabi — ~2 hours from Abu Dhabi city, ~3–3.5 hours from Dubai.", "name": "Liwa International Festival", "photo": "https://upload.wikimedia.org/wikipedia/commons/0/0c/Liwa_Sports_Club_Car_Sand_Race_in_Liwa_International_Festival_2022.jpg", "practical": {"bookAhead": false, "fee": "General entry free; paid events ticketed separately", "note": "Runs Dec 11, 2026–Jan 2, 2027; days 18–25°C, nights 10–12°C — bring layers; programme varies yearly"}, "tags": ["adventure", "culture", "family", "friends"], "todo": ["Watch the Moreeb Dune Climb and freestyle drift competitions", "Explore Liwa Village: carnival rides, classic car museum, crafts souq", "See the falconry championship and sand wrestling", "Catch evening fireworks and drone shows over the dunes", "Take sunset photos at Tal Moreeb"]}]);
+
+/* ---- generic blocks (used by the pre-seeded plan; hidden from the pool) ---- */
+CATALOG.push(
+{id:"g-settle",name:"Settle in & rest",area:"Dubai",duration:"half-day",tags:["rest","chill"],hidden:true,
+ description:"First afternoon in Dubai after the flight. Unpack, decompress, and ease into the trip — no agenda.",
+ location:"Family home in Dubai.",todo:["Unpack","Rest and hydrate","Early night"],photo:null,link:null,
+ practical:{fee:null,bookAhead:false,note:null}},
+{id:"g-family-dinner-home",name:"Family dinner at home",area:"Dubai",duration:"evening",tags:["family","food"],hidden:true,
+ description:"Evening with the family at home — home cooking and catching up.",
+ location:"Family home in Dubai.",todo:["Dinner together","Catch up"],photo:null,link:null,
+ practical:{fee:null,bookAhead:false,note:null}},
+{id:"g-family-dinner-out",name:"Family dinner out",area:"Dubai",duration:"evening",tags:["family","food"],hidden:true,
+ description:"Dinner out with the family — pick a spot everyone likes once you're there.",
+ location:"Dubai — decide on the day.",todo:["Pick a restaurant","Dinner together"],photo:null,link:null,
+ practical:{fee:null,bookAhead:false,note:null}},
+{id:"g-downtime",name:"Downtime at home",area:"Dubai",duration:"half-day",tags:["rest","chill"],hidden:true,
+ description:"Unscheduled downtime at the family's place. Nap, read, recharge — protects against burnout.",
+ location:"Family home in Dubai.",todo:["Rest","Recharge"],photo:null,link:null,
+ practical:{fee:null,bookAhead:false,note:null}},
+{id:"g-brunch-pack",name:"Brunch, pack & depart",area:"Dubai",duration:"morning",tags:["family"],hidden:true,
+ description:"Last morning: family brunch, final packing, head to the airport.",
+ location:"Dubai.",todo:["Brunch","Pack","Head to DXB"],photo:null,link:null,
+ practical:{fee:null,bookAhead:false,note:null}},
+{id:"g-slow-morning",name:"Slow morning",area:"Dubai",duration:"morning",tags:["rest","chill"],hidden:true,
+ description:"No alarms. Ease into the day at your own pace.",
+ location:"Dubai.",todo:["Sleep in","Easy breakfast"],photo:null,link:null,
+ practical:{fee:null,bookAhead:false,note:null}},
+{id:"g-cafe-morning",name:"Slow café morning",area:"Dubai",duration:"morning",tags:["rest","food","chill"],hidden:true,
+ description:"Find a good café, linger over coffee and breakfast. Dubai has excellent specialty coffee spots.",
+ location:"Dubai — e.g. Jumeirah or Alserkal Avenue cafés.",todo:["Café hop","People-watch"],photo:null,link:null,
+ practical:{fee:null,bookAhead:false,note:null}},
+{id:"g-drive-adh",name:"Drive to Abu Dhabi",area:"Dubai",duration:"morning",tags:["chill"],hidden:true,
+ description:"The Dubai–Abu Dhabi drive is about 1.5 hours on the E11 highway. Straightforward, good roads.",
+ location:"E11, Dubai to Abu Dhabi (~140 km).",todo:["Fuel up","Drive down"],photo:null,link:null,
+ practical:{fee:null,bookAhead:false,note:null}},
+{id:"g-drive-back",name:"Drive back to Dubai",area:"Abu Dhabi",duration:"afternoon",tags:["chill"],hidden:true,
+ description:"Return drive to Dubai, about 1.5 hours on the E11.",
+ location:"E11, Abu Dhabi to Dubai.",todo:["Drive back"],photo:null,link:null,
+ practical:{fee:null,bookAhead:false,note:null}},
+{id:"g-friends-dinner",name:"Dinner with friends",area:"Abu Dhabi",duration:"evening",tags:["friends","food"],hidden:true,
+ description:"Evening with friends in Abu Dhabi — the main reason for the Abu Dhabi leg.",
+ location:"Abu Dhabi — decide with friends.",todo:["Dinner","Catch up"],photo:null,link:null,
+ practical:{fee:null,bookAhead:false,note:null}},
+{id:"g-brunch",name:"Late family brunch",area:"Dubai",duration:"morning",tags:["family","food"],hidden:true,
+ description:"Slow late-morning brunch with the family. No rush.",
+ location:"Dubai.",todo:["Brunch together"],photo:null,link:null,
+ practical:{fee:null,bookAhead:false,note:null}}
+);
+
+/* ============================== pre-seeded plan ============================== */
+var PRESEED = {
+ "2026-12-13":{morning:[],afternoon:["g-settle"],evening:["g-family-dinner-home"],note:"Arrive Dubai — keep it light."},
+ "2026-12-14":{morning:["dubai-frame"],afternoon:["alserkal"],evening:["g-family-dinner-out"],note:""},
+ "2026-12-15":{morning:["old-dubai"],afternoon:["g-downtime"],evening:["g-family-dinner-home"],note:"Tuesday — souks are open (closed Friday mornings)."},
+ "2026-12-16":{morning:["g-slow-morning"],afternoon:["dubai-mall"],evening:["burj-khalifa"],note:"Book the Burj Khalifa sunset slot ahead."},
+ "2026-12-17":{morning:["g-drive-adh"],afternoon:["louvre"],evening:["g-friends-dinner"],note:""},
+ "2026-12-18":{morning:["grand-mosque"],afternoon:["corniche","g-drive-back"],evening:["g-family-dinner-home"],note:"Grand Mosque Friday hours: 9–11:30am & 2:30–8:30pm."},
+ "2026-12-19":{morning:["hatta-kayak"],afternoon:["wadi-hub"],evening:["hatta-fireworks"],note:"Full family day — weekend."},
+ "2026-12-20":{morning:["g-brunch"],afternoon:["miracle-garden"],evening:[],note:"Gentle family day."},
+ "2026-12-21":{morning:["heart-sharjah"],afternoon:["g-downtime"],evening:["g-family-dinner-out"],note:""},
+ "2026-12-22":{morning:["g-cafe-morning"],afternoon:[],evening:["desert-safari"],note:"Safari pickup ~2:30–3:30pm. Bring a jacket."},
+ "2026-12-23":{morning:["smccu-breakfast"],afternoon:["hammam-spa"],evening:["g-family-dinner-home"],note:"Recharge day."},
+ "2026-12-24":{morning:["motf"],afternoon:["g-downtime"],evening:["g-family-dinner-out"],note:"Book Museum of the Future ahead — it sells out."},
+ "2026-12-25":{morning:["g-slow-morning"],afternoon:["souk-madinat"],evening:["global-village"],note:"Friday — souks closed in the morning; malls will be busy."},
+ "2026-12-26":{morning:["g-brunch-pack"],afternoon:[],evening:[],note:""}
+};
+
+/* ============================== app state ============================== */
+var mode = "undecided";           // "firebase" | "offline"
+var dbRef = null, fbConnected = false;
+var state = {days:{}, meta:{}};
+var didSeed = false, applyingRemote = false;
+var saveTimer = null, userName = "";
+var filters = {q:"", area:"", tag:""};
+var LS_CFG = "uaePlannerFbCfg", LS_NAME = "uaePlannerName", LS_OFF = "uaePlannerOffline";
+
+function blankDay(){ return {morning:[], afternoon:[], evening:[], note:""}; }
+function ensureDays(){
+  for (var i=0;i<DAYS.length;i++){
+    var iso = DAYS[i].iso;
+    if (!state.days[iso]) state.days[iso] = blankDay();
+    for (var s=0;s<SLOTS.length;s++){
+      var k = SLOTS[s];
+      if (!Object.prototype.toString.call(state.days[iso][k])==="[object Array]") state.days[iso][k] = [];
+    }
+    if (typeof state.days[iso].note !== "string") state.days[iso].note = "";
+  }
+}
+function applyPreseed(){
+  var days = {};
+  for (var k in PRESEED){
+    if (Object.prototype.hasOwnProperty.call(PRESEED,k)){
+      days[k] = {morning:PRESEED[k].morning.slice(), afternoon:PRESEED[k].afternoon.slice(),
+                 evening:PRESEED[k].evening.slice(), note:PRESEED[k].note||""};
+    }
+  }
+  state = {days:days, meta:{updatedAt:Date.now(), updatedBy:userName||"Someone"}};
+}
+
+/* ============================== setup & sync ============================== */
+function setPill(cls, txt){
+  var p = $("syncPill"); p.className = "pill " + cls; $("syncText").textContent = txt;
+}
+function showSetup(){ $("setupOverlay").classList.add("open"); }
+function hideSetup(){ $("setupOverlay").classList.remove("open"); }
+
+function persistLocal(){
+  try{ localStorage.setItem("uaePlannerOff_"+ROOM, JSON.stringify({days:state.days, meta:state.meta})); }catch(e){}
+}
+function startOffline(reason){
+  mode = "offline"; hideSetup();
+  var loaded = false;
+  try{
+    var raw = localStorage.getItem("uaePlannerOff_"+ROOM);
+    if (raw){ var s = JSON.parse(raw); if (s && s.days){ state = s; loaded = true; } }
+  }catch(e){}
+  if (!loaded){ applyPreseed(); persistLocal(); }
+  ensureDays();
+  setPill("offline", reason || "Offline — this device only");
+  renderAll();
+}
+function writeState(){
+  if (applyingRemote) return;
+  state.meta = {updatedAt:Date.now(), updatedBy:userName||"Someone"};
+  if (mode==="firebase" && dbRef){
+    var payload = {days:state.days, meta:state.meta};
+    dbRef.set(payload).catch(function(){ setPill("error","Write failed"); });
+  } else if (mode==="offline"){
+    persistLocal();
+  }
+}
+function writeStateSoon(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(writeState, 700);
+}
+function connectFirebase(cfg){
+  var errBox = $("setupError");
+  if (typeof firebase === "undefined"){
+    errBox.textContent = "Could not load the Firebase library (network blocked?). You can continue offline.";
+    showSetup(); return;
+  }
+  try{
+    if (!firebase.apps.length) firebase.initializeApp(cfg);
+    var db = firebase.database();
+    dbRef = db.ref("plans/" + ROOM);
+  }catch(e){
+    errBox.textContent = "Could not start Firebase: " + e.message;
+    showSetup(); return;
+  }
+  mode = "firebase"; hideSetup();
+  setPill("offline","Connecting…");
+  try{
+    db.ref(".info/connected").on("value", function(s){
+      fbConnected = !!s.val();
+      setPill(fbConnected ? "live" : "offline",
+              fbConnected ? ("Live · room " + ROOM) : "Reconnecting…");
+    });
+  }catch(e){}
+  try{
+    dbRef.on("value", function(snap){
+      if (!snap.exists()){
+        if (!didSeed){ didSeed = true; applyPreseed(); writeState(); }
+        else { ensureDays(); renderAll(); }
+        return;
+      }
+      applyingRemote = true;
+      try{
+        var v = snap.val() || {};
+        state.days = v.days || {};
+        state.meta = v.meta || {};
+        ensureDays();
+        var ae = document.activeElement;
+        if (ae && ae.classList && ae.classList.contains("day-note")) return; // don't clobber typing
+        renderAll();
+      }finally{
+        applyingRemote = false;
+      }
+    }, function(){
+      setPill("error","Sync error — check database URL & rules");
+    });
+  }catch(e){
+    setPill("error","Sync error");
+  }
+}
+
+/* ============================== rendering ============================== */
+function tagDots(tags){
+  return tags.map(function(t){
+    return '<span class="tagdot" title="'+esc(t)+'" style="background:'+((TAG_COLORS[t]||"#999"))+'"></span>';
+  }).join("");
+}
+function placements(id){
+  var n = 0;
+  for (var i=0;i<DAYS.length;i++){
+    var d = state.days[DAYS[i].iso]; if(!d) continue;
+    for (var s=0;s<SLOTS.length;s++){
+      var a = d[SLOTS[s]];
+      for (var k=0;k<a.length;k++) if (a[k]===id) n++;
+    }
+  }
+  return n;
+}
+function cardHTML(a, opts){
+  opts = opts || {};
+  var n = placements(a.id);
+  var fromAttr = opts.from ? (" data-from='"+esc(JSON.stringify(opts.from))+"'") : "";
+  return '<div class="card" draggable="true" data-id="'+esc(a.id)+'"'+fromAttr+'>'+
+    (opts.removable ? '<button class="rm" data-rm="1" title="Remove">×</button>' : "")+
+    (n ? '<span class="onboard">×'+n+'</span>' : "")+
+    '<h3>'+esc(a.name)+'</h3>'+
+    '<div class="meta"><span>'+esc(a.area)+'</span><span>·</span><span>'+esc(a.duration)+'</span></div>'+
+    '<div class="meta">'+tagDots(a.tags)+'</div>'+
+  '</div>';
+}
+function renderPool(){
+  var q = filters.q.toLowerCase(), html = "", count = 0;
+  for (var i=0;i<CATALOG.length;i++){
+    var a = CATALOG[i];
+    if (a.hidden) continue;
+    if (filters.area && a.area !== filters.area) continue;
+    if (filters.tag && a.tags.indexOf(filters.tag) < 0) continue;
+    if (q && (a.name+" "+a.area+" "+a.description).toLowerCase().indexOf(q) < 0) continue;
+    html += cardHTML(a); count++;
+  }
+  $("pool").innerHTML = html || '<div class="hint">No activities match the filters.</div>';
+  $("poolCount").textContent = count + " activities";
+}
+function paceOf(iso){
+  var d = state.days[iso], n = 0;
+  for (var s=0;s<SLOTS.length;s++) n += d[SLOTS[s]].length;
+  return n;
+}
+function renderBoard(){
+  var html = "", packed = 0, restful = 0;
+  for (var i=0;i<DAYS.length;i++){
+    var day = DAYS[i], iso = day.iso, d = state.days[iso];
+    var n = paceOf(iso);
+    var pc = n>=3 ? "packed" : (n<=1 ? "restful" : "normal");
+    if (n>=3) packed++; if (n<=1) restful++;
+    var plabel = pc==="packed" ? "packed" : (pc==="restful" ? "restful" : "easy");
+    html += '<div class="day"><div class="day-head"><div class="d">'+day.wd+', '+day.label+'</div>'+
+      '<span class="pace '+pc+'">'+plabel+' · '+n+'</span></div>';
+    for (var s=0;s<SLOTS.length;s++){
+      var k = SLOTS[s];
+      html += '<div class="slot" data-day="'+iso+'" data-slot="'+k+'"><div class="slabel">'+SLOT_LABEL[k]+'</div>';
+      for (var j=0;j<d[k].length;j++){
+        var a = BY_ID[d[k][j]];
+        if (!a) continue;
+        html += cardHTML(a, {removable:true, from:{day:iso, slot:k, idx:j}});
+      }
+      html += '</div>';
+    }
+    html += '<textarea class="day-note" data-day="'+iso+'" placeholder="Day note…">'+esc(d.note)+'</textarea></div>';
+  }
+  $("board").innerHTML = html;
+  $("summary").textContent = "14 days · " + packed + " packed · " + restful + " restful";
+}
+function renderAll(){
+  renderPool();
+  var ae = document.activeElement;
+  if (ae && ae.classList && ae.classList.contains("day-note")) return;
+  renderBoard();
+}
+
+/* ============================== detail modal ============================== */
+function openModal(id){
+  var a = BY_ID[id]; if(!a) return;
+  var h = "";
+  if (a.photo) h += '<img class="hero" src="'+esc(a.photo)+'" alt="'+esc(a.name)+'" loading="lazy" onerror="this.style.display=\'none\'">';
+  h += '<div class="mbody">';
+  h += '<h2>'+esc(a.name)+'</h2>';
+  h += '<div class="mmeta">'+esc(a.area)+' · '+esc(a.duration)+'</div>';
+  h += '<div class="tags">'+tagDots(a.tags)+' <span style="font-size:12px;color:var(--muted)">'+a.tags.map(esc).join(", ")+'</span></div>';
+  h += '<p>'+esc(a.description)+'</p>';
+  if (a.location){ h += '<h4>Location</h4><p>'+esc(a.location)+'</p>'; }
+  if (a.todo && a.todo.length){
+    h += '<h4>What to do there</h4><ul>'+a.todo.map(function(t){return '<li>'+esc(t)+'</li>';}).join("")+'</ul>';
+  }
+  var p = a.practical || {};
+  if (p.fee || p.bookAhead || p.note){
+    h += '<h4>Good to know</h4><div class="prac">';
+    if (p.fee) h += '<div><b>Entry:</b> '+esc(p.fee)+'</div>';
+    if (p.bookAhead) h += '<div><b>Book ahead</b> — reserve in advance.</div>';
+    if (p.note) h += '<div>'+esc(p.note)+'</div>';
+    h += '</div>';
+  }
+  if (a.link) h += '<a class="extlink" href="'+esc(a.link)+'" target="_blank" rel="noopener">Official site ↗</a>';
+  h += '<h4>Add to a day</h4><div class="filters">'+
+       '<select id="mDay">'+DAYS.map(function(d){return '<option value="'+d.iso+'">'+d.wd+' '+d.label+'</option>';}).join("")+'</select>'+
+       '<select id="mSlot"><option value="morning">Morning</option><option value="afternoon">Afternoon</option><option value="evening">Evening</option></select>'+
+       '<button class="btn small" id="mAdd">Add</button></div>';
+  h += '</div>';
+  $("modalBody").innerHTML = h;
+  $("modalVeil").classList.add("open");
+  $("mAdd").onclick = function(){
+    addToDay(id, $("mDay").value, $("mSlot").value);
+    closeModal();
+  };
+}
+function closeModal(){ $("modalVeil").classList.remove("open"); }
+
+/* ============================== mutations ============================== */
+function addToDay(id, iso, slot){
+  if (!state.days[iso]) state.days[iso] = blankDay();
+  state.days[iso][slot].push(id);
+  writeState(); renderAll();
+}
+function removeFrom(f){
+  var arr = state.days[f.day] && state.days[f.day][f.slot];
+  if (arr) arr.splice(f.idx, 1);
+  writeState(); renderAll();
+}
+
+/* ============================== events ============================== */
+function wireEvents(){
+  $("btnConnect").onclick = function(){
+    var cfg = {
+      apiKey: $("cfgApiKey").value.trim(),
+      authDomain: $("cfgAuthDomain").value.trim(),
+      databaseURL: $("cfgDbUrl").value.trim().replace(/\/+$/,""),
+      projectId: $("cfgProjectId").value.trim()
+    };
+    userName = $("cfgName").value.trim();
+    var err = $("setupError"); err.textContent = "";
+    if (!cfg.apiKey || !cfg.authDomain || !cfg.databaseURL || !cfg.projectId){
+      err.textContent = "Please fill in all four Firebase fields."; return;
+    }
+    if (!/^https:\/\/.+/.test(cfg.databaseURL)){
+      err.textContent = "databaseURL should look like https://your-project-default-rtdb.firebaseio.com"; return;
+    }
+    try{
+      localStorage.setItem(LS_CFG, JSON.stringify(cfg));
+      localStorage.setItem(LS_NAME, userName);
+      localStorage.removeItem(LS_OFF);
+    }catch(e){}
+    connectFirebase(cfg);
+  };
+  $("btnOffline").onclick = function(){
+    userName = $("cfgName").value.trim();
+    try{ localStorage.setItem(LS_NAME, userName); localStorage.setItem(LS_OFF, "1"); }catch(e){}
+    startOffline();
+  };
+  $("btnSettings").onclick = function(){
+    try{
+      var cfg = JSON.parse(localStorage.getItem(LS_CFG) || "null");
+      if (cfg){
+        $("cfgApiKey").value = cfg.apiKey || "";
+        $("cfgAuthDomain").value = cfg.authDomain || "";
+        $("cfgDbUrl").value = cfg.databaseURL || "";
+        $("cfgProjectId").value = cfg.projectId || "";
+      }
+    }catch(e){}
+    showSetup();
+  };
+  $("modalClose").onclick = closeModal;
+  $("modalVeil").addEventListener("click", function(e){ if (e.target === this) closeModal(); });
+  document.addEventListener("keydown", function(e){ if (e.key === "Escape") closeModal(); });
+
+  $("poolSearch").addEventListener("input", function(e){ filters.q = e.target.value; renderPool(); });
+  $("areaFilter").addEventListener("change", function(e){ filters.area = e.target.value; renderPool(); });
+  $("tagFilter").addEventListener("change", function(e){ filters.tag = e.target.value; renderPool(); });
+
+  document.addEventListener("input", function(e){
+    var t = e.target;
+    if (t && t.classList && t.classList.contains("day-note")){
+      var iso = t.getAttribute("data-day");
+      if (state.days[iso]){ state.days[iso].note = t.value; writeStateSoon(); }
+    }
+  });
+
+  document.addEventListener("click", function(e){
+    var rm = e.target.closest ? e.target.closest("[data-rm]") : null;
+    if (rm){
+      var card = rm.closest(".card");
+      if (card && card.getAttribute("data-from")){
+        try{ removeFrom(JSON.parse(card.getAttribute("data-from"))); }catch(err){}
+      }
+      e.stopPropagation();
+      return;
+    }
+    var card2 = e.target.closest ? e.target.closest(".card") : null;
+    if (card2 && card2.getAttribute("data-id")){
+      openModal(card2.getAttribute("data-id"));
+    }
+  });
+
+  document.addEventListener("dragstart", function(e){
+    var card = e.target.closest ? e.target.closest(".card") : null;
+    if (!card || !e.dataTransfer) return;
+    var f = card.getAttribute("data-from");
+    e.dataTransfer.setData("text/plain", JSON.stringify({
+      id: card.getAttribute("data-id"),
+      from: f ? JSON.parse(f) : {pool:true}
+    }));
+    e.dataTransfer.effectAllowed = "move";
+  });
+  document.addEventListener("dragover", function(e){
+    var slot = e.target.closest ? e.target.closest(".slot") : null;
+    if (slot){ e.preventDefault(); slot.classList.add("over"); }
+  });
+  document.addEventListener("dragleave", function(e){
+    var slot = e.target.closest ? e.target.closest(".slot") : null;
+    if (slot) slot.classList.remove("over");
+  });
+  document.addEventListener("drop", function(e){
+    var overs = document.querySelectorAll(".slot.over");
+    for (var i=0;i<overs.length;i++) overs[i].classList.remove("over");
+    var slot = e.target.closest ? e.target.closest(".slot") : null;
+    if (!slot) return;
+    e.preventDefault();
+    try{
+      var d = JSON.parse(e.dataTransfer.getData("text/plain"));
+      if (d.from && !d.from.pool) removeFromSilent(d.from);
+      addToDay(d.id, slot.getAttribute("data-day"), slot.getAttribute("data-slot"));
+    }catch(err){}
+  });
+
+  $("btnExport").onclick = function(){
+    var blob = new Blob([JSON.stringify({room:ROOM, exportedAt:new Date().toISOString(), days:state.days}, null, 2)],
+      {type:"application/json"});
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "uae-plan-" + ROOM + ".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+  };
+}
+function removeFromSilent(f){
+  var arr = state.days[f.day] && state.days[f.day][f.slot];
+  if (arr) arr.splice(f.idx, 1);
+}
+
+/* ============================== init ============================== */
+function init(){
+  indexCatalog();
+  $("roomPill").textContent = "room: " + ROOM;
+  var af = $("areaFilter");
+  AREAS.forEach(function(a){ var o=document.createElement("option"); o.value=a; o.textContent=a; af.appendChild(o); });
+  var tf = $("tagFilter");
+  TAGS.forEach(function(t){ var o=document.createElement("option"); o.value=t; o.textContent=t; tf.appendChild(o); });
+  try{
+    userName = localStorage.getItem(LS_NAME) || "";
+    if (userName) $("cfgName").value = userName;
+  }catch(e){}
+  wireEvents();
+  var cfg = null, wasOffline = false;
+  try{ cfg = JSON.parse(localStorage.getItem(LS_CFG) || "null"); }catch(e){}
+  try{ wasOffline = localStorage.getItem(LS_OFF) === "1"; }catch(e){}
+  if (cfg && cfg.apiKey && !wasOffline){
+    connectFirebase(cfg);
+  } else if (wasOffline){
+    startOffline();
+  } else {
+    setPill("offline", "Not connected");
+    showSetup();
+  }
+}
+init();
+</script>
+</body>
+</html>
