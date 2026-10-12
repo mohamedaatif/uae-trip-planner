@@ -110,8 +110,9 @@ section{margin-bottom:22px}
 .slot .card .meta{font-size:10.5px}
 .day-note{margin:0 8px 8px;font:inherit;font-size:12.5px;border:1px solid var(--line);border-radius:8px;
   padding:7px;resize:vertical;min-height:38px;background:#fffdf8}
-.rm{position:absolute;top:4px;right:4px;border:0;background:rgba(255,255,255,.85);border-radius:50%;
-  width:22px;height:22px;font-size:13px;line-height:1;color:#a33}
+.rm{position:absolute;top:4px;right:4px;border:0;background:rgba(255,255,255,.9);border-radius:50%;
+  width:26px;height:26px;font-size:15px;line-height:1;color:#a33;cursor:pointer;
+  box-shadow:0 1px 3px rgba(0,0,0,.18)}
 .summary{font-size:13px;color:var(--muted);background:var(--card);border:1px solid var(--line);
   border-radius:10px;padding:8px 12px;display:inline-block}
 /* modal */
@@ -530,7 +531,7 @@ function cardHTML(a, opts){
   var fromAttr = opts.from ? (" data-from='"+esc(JSON.stringify(opts.from))+"'") : "";
   return '<div class="card" draggable="true" data-id="'+esc(a.id)+'"'+fromAttr+'>'+
     (opts.removable ? '<button class="rm" data-rm="1" title="Remove">×</button>' : "")+
-    (n ? '<span class="onboard">×'+n+'</span>' : "")+
+    (n && !opts.removable ? '<span class="onboard">×'+n+'</span>' : "")+
     '<h3>'+esc(a.name)+'</h3>'+
     '<div class="meta"><span>'+esc(a.area)+'</span><span>·</span><span>'+esc(a.duration)+'</span></div>'+
     '<div class="meta">'+tagDots(a.tags)+'</div>'+
